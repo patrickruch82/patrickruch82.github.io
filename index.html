@@ -9,8 +9,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ruchs App">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#FAF3E7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#191511" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#EAF1F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101720" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-512.png" sizes="512x512" type="image/png">
@@ -19,17 +19,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#FAF3E7;
-  --surface:#FFFCF6;
-  --surface-2:#F4EBDB;
-  --ink:#2E2418;
-  --muted:#7C6E5B;
-  --line:#E6D8C1;
-  --line-soft:#F0E5D3;
-  --alert:#B4462F;
+  --paper:#EAF1F8;
+  --surface:#FBFDFF;
+  --surface-2:#E1EAF4;
+  --ink:#1C2A38;
+  --muted:#63768A;
+  --line:#CFDDEB;
+  --line-soft:#DFE9F3;
+  --alert:#B23B31;
   --radius:14px;
   --radius-sm:10px;
-  --shadow:0 -1px 0 var(--line), 0 -8px 24px rgba(70,52,26,.07);
+  --shadow:0 -1px 0 var(--line), 0 -8px 24px rgba(28,42,56,.08);
   --pad:16px;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
@@ -38,21 +38,21 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --paper:#191511;
-    --surface:#231E18;
-    --surface-2:#2B241C;
-    --ink:#F1E8DA;
-    --muted:#A0927F;
-    --line:#383025;
-    --line-soft:#2F2820;
-    --alert:#E07A5F;
+    --paper:#101720;
+    --surface:#18212C;
+    --surface-2:#1F2A37;
+    --ink:#E6EEF7;
+    --muted:#8FA2B5;
+    --line:#2B3846;
+    --line-soft:#222E3B;
+    --alert:#E2776B;
     --shadow:0 -1px 0 var(--line), 0 -8px 24px rgba(0,0,0,.45);
   }
 }
 :root[data-theme="dark"]{
-  --paper:#191511; --surface:#231E18; --surface-2:#2B241C;
-  --ink:#F1E8DA; --muted:#A0927F; --line:#383025; --line-soft:#2F2820;
-  --alert:#E07A5F; --shadow:0 -1px 0 var(--line), 0 -8px 24px rgba(0,0,0,.45);
+  --paper:#101720; --surface:#18212C; --surface-2:#1F2A37;
+  --ink:#E6EEF7; --muted:#8FA2B5; --line:#2B3846; --line-soft:#222E3B;
+  --alert:#E2776B; --shadow:0 -1px 0 var(--line), 0 -8px 24px rgba(0,0,0,.45);
 }
 *,*::before,*::after{box-sizing:border-box}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
@@ -201,7 +201,7 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .p-ev{cursor:grab;user-select:none;-webkit-user-select:none}
 .p-ev.ghosted{opacity:.25}
 .drag-ghost{position:fixed;z-index:200;pointer-events:none;opacity:.95;
-  box-shadow:0 10px 26px rgba(70,52,26,.3);transform:scale(1.03);cursor:grabbing}
+  box-shadow:0 10px 26px rgba(20,35,50,.32);transform:scale(1.03);cursor:grabbing}
 .p-drop{position:absolute;left:2px;right:2px;border:2px dashed var(--ink);
   border-radius:5px;pointer-events:none;opacity:.5}
 .p-col{touch-action:pan-x pan-y}
@@ -212,6 +212,9 @@ body.dragging .p-scroll{touch-action:none}
   padding-top:calc(24px + env(safe-area-inset-top,0px))}
 .lock.on{display:flex}
 .lockbox{width:100%;max-width:380px;text-align:center}
+.famfoto{width:100%;max-width:300px;aspect-ratio:3/2;object-fit:cover;
+  border-radius:16px;margin:0 auto 18px;display:block;
+  box-shadow:0 6px 20px rgba(28,42,56,.14)}
 .lockbox h2{font-size:21px;margin-top:10px}
 .lockhint{color:var(--muted);font-size:13.5px;margin:6px 0 20px}
 .lockgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:12px}
@@ -275,7 +278,7 @@ body.dragging .p-scroll{touch-action:none}
 .chatbar input{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:10px 15px;min-width:0}
 
 /* Sheet */
-.scrim{position:fixed;inset:0;background:rgba(52,38,20,.42);z-index:50;display:none}
+.scrim{position:fixed;inset:0;background:rgba(16,28,40,.45);z-index:50;display:none}
 .scrim.open{display:block}
 .sheet{
   position:fixed;left:0;right:0;bottom:0;z-index:51;background:var(--surface);
@@ -862,6 +865,7 @@ function showLogin(msg){
   if (!loginPick && !loginManual && leute.length){
     el.innerHTML = `
       <div class="lockbox">
+        <img src="familie.jpg" alt="" class="famfoto" onerror="this.remove()">
         <h2>Ruchs Organisations App</h2>
         <p class="lockhint">Wer bist du?</p>
         <div class="lockgrid">
