@@ -164,9 +164,13 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 
 .p-wrap{margin:12px calc(var(--pad)*-1) 0;background:var(--surface);
   border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.p-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.p-scroll{overflow:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;
+  overscroll-behavior:contain;
+  max-height:calc(100vh - 268px);
+  max-height:calc(100dvh - 268px);
+  min-height:300px}
 .pgrid{display:grid;min-width:max-content;--rh:34px}
-.p-corner,.p-hcell{position:sticky;top:0;z-index:5;background:var(--surface);
+.p-corner,.p-hcell{position:sticky;top:0;z-index:5;background:var(--surface);box-shadow:0 1px 0 var(--line);
   border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:5px;
   font-size:12px;font-weight:600;font-family:"Bricolage Grotesque",sans-serif}
 .p-corner{left:0;z-index:6}
@@ -199,7 +203,7 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
   border-radius:5px;pointer-events:none;opacity:.5}
 .p-col{touch-action:pan-x pan-y}
 body.dragging{user-select:none;-webkit-user-select:none}
-body.dragging .p-scroll{overflow:hidden;touch-action:none}
+body.dragging .p-scroll{touch-action:none}
 .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom,0px));
   transform:translate(-50%,14px);background:var(--ink);color:var(--paper);
   padding:9px 16px;border-radius:999px;font-size:13.5px;z-index:300;opacity:0;
@@ -330,6 +334,19 @@ const REASONS_DEFAULT = [
   { id:'r4', text:'Handy am Tisch',         amount:.5 },
   { id:'r5', text:'Zimmer nicht aufgeräumt', amount:.5 }
 ];
+const LISTS_DEFAULT = [
+  { id:'lebensmittel', name:'Lebensmittel' },
+  { id:'medikamente',  name:'Medikamente' },
+  { id:'kleider',      name:'Kleider' },
+  { id:'tierbedarf',   name:'Tierbedarf' },
+  { id:'haushalt',     name:'Haushalt' }
+];
+const ALLOWANCE_DEFAULT = { interval:'woche', day:0 };   // day: 0 = Sonntag
+const INTERVALS = [
+  { v:'woche',      l:'Wöchentlich', len:7 },
+  { v:'zweiwochen', l:'Alle 2 Wochen', len:14 },
+  { v:'monat',      l:'Monatlich' }
+];
 const PERMS_DEFAULT = {
   'events.edit':  'eltern',
   'shop.edit':    'alle',
@@ -387,11 +404,7 @@ const D = n => iso(addDays(TODAY, n));
 /* ============ Demodaten ============ */
 function seed(){ return {
   events: [],
-  lists: [
-    { id:'migros', name:'Migros',   items:[] },
-    { id:'coop',   name:'Coop',     items:[] },
-    { id:'drog',   name:'Drogerie', items:[] }
-  ],
+  lists: LISTS_DEFAULT.map(l => ({ ...l, items: [] })),
   menu: [],
   school: [],
   chores: [],
@@ -402,8 +415,9 @@ function seed(){ return {
   members: MEMBERS_DEFAULT.map(m => ({ ...m })),
   reasons: REASONS_DEFAULT.map(r => ({ ...r })),
   perms: { ...PERMS_DEFAULT },
+  allowance: { ...ALLOWANCE_DEFAULT },
   me: 'ka',
-  ui: { list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(),
+  ui: { list:'lebensmittel', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(),
         calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
 };}
 
@@ -466,8 +480,17 @@ if (!S || !S.events) S = seed();
 if (!Array.isArray(S.members) || !S.members.length) S.members = MEMBERS_DEFAULT.map(m => ({ ...m }));
 if (!Array.isArray(S.reasons) || !S.reasons.length) S.reasons = REASONS_DEFAULT.map(r => ({ ...r }));
 S.perms = { ...PERMS_DEFAULT, ...(S.perms || {}) };
+S.allowance = { ...ALLOWANCE_DEFAULT, ...(S.allowance || {}) };
 if (!S.me || !S.members.some(m => m.id === S.me)) S.me = S.members[0].id;
 refreshMembers();
+if (!S.listsV2){
+  const alte = (S.lists || []).flatMap(l => l.items || []);
+  S.lists = LISTS_DEFAULT.map(l => ({ ...l, items: [] }));
+  S.lists[0].items = alte;          // alles Bisherige unter Lebensmittel
+  S.ui.list = 'lebensmittel';
+  S.listsV2 = true;
+}
+if (!S.lists.some(l => l.id === S.ui.list)) S.ui.list = S.lists[0].id;
 
 /* Einmalig: die ursprünglichen Beispieldaten entfernen.
    Die aus dem Papierkalender übernommenen Termine (Kennung p-…) bleiben. */
@@ -488,12 +511,21 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){
 const ev = (a,b) => (a.time||'').localeCompare(b.time||'');
 const eventsOn = d => S.events.filter(e => e.date === d).sort(ev);
 const av = (id, cls='') => { const m = mem(id); return `<span class="avatar ${cls}" style="background:${m.color}">${ini(m)}</span>`; };
-function thisWeek(){ // Mo–So der laufenden Woche
-  const off = (TODAY.getDay() + 6) % 7;
-  return Array.from({length:7}, (_,i) => iso(addDays(TODAY, -off + i)));
+/* Laufende Sackgeld-Periode nach der eingestellten Regel */
+function period(){
+  const cfg = S.allowance || ALLOWANCE_DEFAULT;
+  if (cfg.interval === 'monat'){
+    return { start: iso(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1)),
+             end:   iso(new Date(TODAY.getFullYear(), TODAY.getMonth()+1, 0)) };
+  }
+  const len = cfg.interval === 'zweiwochen' ? 14 : 7;
+  const off = ((cfg.day ?? 0) - TODAY.getDay() + 7) % 7;
+  const end = addDays(TODAY, off);
+  return { start: iso(addDays(end, -(len-1))), end: iso(end) };
 }
-const WEEK = thisWeek();
-const strikesOf = id => S.strikes.filter(s => s.member===id && WEEK.includes(s.date));
+const payoutIn = () => daysUntil(period().end);
+const strikesOf = id => { const p = period();
+  return S.strikes.filter(s => s.member===id && s.date >= p.start && s.date <= p.end); };
 const deduction = id => strikesOf(id).reduce((n,s) => n + s.amount, 0);
 const payout = id => Math.max(0, (mem(id).allowance || 0) - deduction(id));
 const choresOf = id => S.chores.filter(c => c.member === id);
@@ -645,12 +677,12 @@ function viewHome(){
   </section>
 
   <section class="sec">
-    <div class="sec-head"><h2>Sackgeld</h2><span class="hint">Auszahlung heute Abend</span></div>
+    <div class="sec-head"><h2>Sackgeld</h2><span class="hint">${payoutIn()===0?'Auszahlung heute':payoutIn()===1?'Auszahlung morgen':'Auszahlung in '+payoutIn()+' Tagen'}</span></div>
     <div class="card">
       ${KIDS.map(k => `<div class="row" style="--pc:${k.color}">
         ${av(k.id,'sm')}
         <div class="body"><div class="t">${k.name}</div>
-        <div class="s">${strikesOf(k.id).length ? strikesOf(k.id).length+' Striche diese Woche' : 'keine Striche'}</div></div>
+        <div class="s">${strikesOf(k.id).length ? strikesOf(k.id).length+' Striche in dieser Periode' : 'keine Striche'}</div></div>
         <div class="r">${chf(payout(k.id))}</div></div>`).join('')}
     </div>
   </section>
@@ -785,6 +817,18 @@ function initPlaner(){
       dragState.timer = setTimeout(() => beginDrag(e.clientX, e.clientY), 330);
   });
 
+  let autoTimer = null;
+  function autoScroll(){
+    const st = dragState, box = document.querySelector('.p-scroll');
+    if (!st || !st.drag || !box || !st.px){ autoTimer = null; return; }
+    const r = box.getBoundingClientRect(), m = 46, step = 11;
+    if (st.py < r.top + m)          box.scrollTop  -= step;
+    else if (st.py > r.bottom - m)  box.scrollTop  += step;
+    if (st.px < r.left + m)         box.scrollLeft -= step;
+    else if (st.px > r.right - m)   box.scrollLeft += step;
+    autoTimer = requestAnimationFrame(autoScroll);
+  }
+
   function beginDrag(x, y){
     const st = dragState; if (!st || !st.evEl) return;
     st.drag = true;
@@ -800,6 +844,7 @@ function initPlaner(){
     st.ghost = g; st.evEl.classList.add('ghosted');
     try { grid.setPointerCapture(st.pid); } catch(err){}
     if (navigator.vibrate) navigator.vibrate(12);
+    if (!autoTimer) autoTimer = requestAnimationFrame(autoScroll);
   }
 
   grid.addEventListener('pointermove', e => {
@@ -809,6 +854,7 @@ function initPlaner(){
       return;
     }
     e.preventDefault();
+    st.px = e.clientX; st.py = e.clientY;
     st.ghost.style.left = (e.clientX - st.offX) + 'px';
     st.ghost.style.top  = (e.clientY - st.offY) + 'px';
     const col = colAt(e.clientX);
@@ -829,6 +875,7 @@ function initPlaner(){
     clearTimeout(st.timer);
     grid.querySelectorAll('.p-drop').forEach(n => n.remove());
     if (st.drag){
+      if (autoTimer){ cancelAnimationFrame(autoTimer); autoTimer = null; }
       document.body.classList.remove('dragging');
       if (st.ghost) st.ghost.remove();
       if (st.evEl) st.evEl.classList.remove('ghosted');
@@ -981,7 +1028,7 @@ function viewChores(){
   </section>
 
   <section class="sec">
-    <div class="sec-head"><h2>Strichliste</h2><span class="hint">Woche ${fmtDay(WEEK[0])} – ${fmtDay(WEEK[6])}</span></div>
+    <div class="sec-head"><h2>Strichliste</h2><span class="hint">${fmtDay(period().start)} – ${fmtDay(period().end)}</span></div>
     ${KIDS.map(k => {
       const st = strikesOf(k.id), abz = deduction(k.id);
       return `<div class="card" style="--pc:${k.color}">
@@ -1002,7 +1049,8 @@ function viewChores(){
         </div>` : ''}
       </div>`;
     }).join('')}
-    <p class="footnote">Basis: CHF 1.00 pro Lebensjahr und Woche. Auszahlung sonntags.</p>
+    <p class="footnote">${INTERVALS.find(i=>i.v===S.allowance.interval).l}${S.allowance.interval==='monat'?' am Monatsende':', Auszahlung am '+WDL[S.allowance.day]}.
+      Beträge und Abzüge stellst du unter Profile ein.</p>
   </section>`;
 }
 
@@ -1029,7 +1077,7 @@ function viewProfil(){
       ${MEMBERS.map(m => `<div class="row" style="--pc:${m.color}">
         ${av(m.id)}
         <div class="body"><div class="t">${esc(m.name)}${m.id===S.me?' · du':''}</div>
-          <div class="s">${m.role==='parent'?'Elternteil':m.role==='kid'?`Kind · CHF ${(m.allowance||0).toFixed(2)} pro Woche`:'Gemeinsame Spalte'}</div></div>
+          <div class="s">${m.role==='parent'?'Elternteil':m.role==='kid'?`Kind · CHF ${(m.allowance||0).toFixed(2)} pro Auszahlung`:'Gemeinsame Spalte'}</div></div>
         ${admin ? `<button class="linkbtn" data-editmem="${m.id}">›</button>` : ''}
       </div>`).join('')}
     </div>
@@ -1051,14 +1099,42 @@ function viewProfil(){
   </section>
 
   <section class="sec">
-    <div class="sec-head"><h2>Strichgründe</h2>
+    <div class="sec-head"><h2>Sackgeld</h2><span class="hint">gilt für alle Kinder</span></div>
+    <div class="card">
+      <div class="permrow">
+        <div class="t">Auszahlung</div>
+        <div class="seg">${INTERVALS.map(i => `
+          <button data-interval="${i.v}" aria-pressed="${S.allowance.interval===i.v}" ${admin?'':'disabled'}>${i.l}</button>`).join('')}</div>
+      </div>
+      ${S.allowance.interval !== 'monat' ? `
+      <div class="permrow">
+        <div class="t">Auszahlungstag</div>
+        <div class="seg" style="flex-wrap:wrap">${[1,2,3,4,5,6,0].map(d => `
+          <button data-payday="${d}" aria-pressed="${S.allowance.day===d}" ${admin?'':'disabled'}>${WD[d]}</button>`).join('')}</div>
+      </div>` : ''}
+      <div class="permrow">
+        <div class="t">Beträge pro Kind</div>
+        ${KIDS.length ? KIDS.map(k => `<div class="row" style="--pc:${k.color};padding:7px 0">
+          ${av(k.id,'sm')}
+          <div class="body"><div class="t">${esc(k.name)}</div></div>
+          <div class="r">${chf(k.allowance||0)}</div>
+          ${admin ? `<button class="linkbtn" data-editmem="${k.id}">ändern</button>` : ''}
+        </div>`).join('') : '<div class="s" style="color:var(--muted)">Noch kein Kind angelegt.</div>'}
+      </div>
+      <p class="p-legend" style="text-align:left;margin-top:4px">
+        Laufende Periode: ${fmtDay(period().start)} bis ${fmtDay(period().end)}.</p>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head"><h2>Strichgründe und Abzüge</h2>
       ${admin ? `<button class="btn ghost" data-sheet="reason">${icon('plus',15)} Grund</button>` : ''}</div>
     <div class="card">
       ${S.reasons.length ? S.reasons.map(r => `<div class="row">
         <div class="body"><div class="t">${esc(r.text)}</div></div>
         <div class="r" style="color:var(--alert)">−${r.amount.toFixed(2)}</div>
-        ${admin ? `<button class="linkbtn" data-delreason="${r.id}" aria-label="Löschen">×</button>` : ''}
-      </div>`).join('') : '<div class="empty">Noch kein Grund angelegt.</div>'}
+        ${admin ? `<button class="linkbtn" data-editreason="${r.id}">›</button>` : ''}
+      </div>`).join('') : '<div class="empty">Noch kein Grund angelegt. Ohne Grund gibt es keine Strich-Knöpfe bei den Kindern.</div>'}
     </div>
   </section>
 
@@ -1130,17 +1206,23 @@ function openSheet(kind, pre){
         <option value="shared" ${m.role==='shared'?'selected':''}>Gemeinsame Spalte</option></select></div>
       <div style="flex:1"><label for="f-color">Farbe</label><input id="f-color" type="color" value="${m.color||'#7A7268'}" style="height:42px;padding:3px"></div>
     </div>
-    <div class="field"><label for="f-allow">Sackgeld pro Woche in CHF, nur bei Kindern</label>
+    <div class="field"><label for="f-allow">Sackgeld pro Auszahlung in CHF, nur bei Kindern</label>
       <input id="f-allow" type="number" step="0.5" min="0" value="${m.allowance!=null?m.allowance:''}"></div>
     <div class="actions">
       ${kind==='editmem' ? `<button class="btn ghost" data-delmem="${pre.id}">Löschen</button>` : '<button class="btn ghost" data-close>Abbrechen</button>'}
       <button class="btn" data-save="member">Sichern</button></div>`;
     })()
-  : kind === 'reason' ? `
-    <h3>Neuer Strichgrund</h3>
-    <div class="field"><label for="f-rtext">Grund</label><input id="f-rtext" placeholder="z. B. Znüni vergessen"></div>
-    <div class="field"><label for="f-ramt">Abzug in CHF</label><input id="f-ramt" type="number" step="0.5" min="0" value="0.5"></div>
-    <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="reason">Grund sichern</button></div>`
+  : kind === 'reason' || kind === 'editreason' ? (() => {
+      const r = kind==='editreason' ? (S.reasons.find(x => x.id === pre.id) || {}) : { text:'', amount:.5 };
+      editId = kind==='editreason' ? pre.id : null;
+      return `
+    <h3>${kind==='editreason' ? 'Grund bearbeiten' : 'Neuer Strichgrund'}</h3>
+    <div class="field"><label for="f-rtext">Grund</label><input id="f-rtext" value="${esc(r.text||'')}" placeholder="z. B. Znüni vergessen"></div>
+    <div class="field"><label for="f-ramt">Abzug in CHF</label><input id="f-ramt" type="number" step="0.5" min="0" value="${r.amount!=null?r.amount:0.5}"></div>
+    <div class="actions">
+      ${kind==='editreason' ? `<button class="btn ghost" data-delreason="${pre.id}">Löschen</button>` : '<button class="btn ghost" data-close>Abbrechen</button>'}
+      <button class="btn" data-save="reason">Sichern</button></div>`;
+    })()
   : kind === 'menu' ? `
     <h3>Neues Menü</h3>
     <div class="field"><label for="f-day">Tag</label><select id="f-day">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<option>${d}</option>`).join('')}</select></div>
@@ -1189,8 +1271,11 @@ document.addEventListener('click', e => {
     S.members = S.members.filter(m => m.id !== d.delmem);
     if (S.me === d.delmem) S.me = S.members[0].id;
     refreshMembers(); closeSheet(); return render(); }
+  if (d.editreason){ if (!may('admin')) return deny(); return openSheet('editreason', { id:d.editreason }); }
   if (d.delreason){ if (!may('admin')) return deny();
-    S.reasons = S.reasons.filter(r => r.id !== d.delreason); return render(); }
+    S.reasons = S.reasons.filter(r => r.id !== d.delreason); closeSheet(); return render(); }
+  if (d.interval){ if (!may('admin')) return deny(); S.allowance.interval = d.interval; return render(); }
+  if (d.payday){ if (!may('admin')) return deny(); S.allowance.day = +d.payday; return render(); }
   if (d.editev){ if (!may('events.edit')) return deny(); return openSheet('editev', { id:d.editev }); }
   if ('today' in d){ S.ui.calMonth = TODAY.getMonth(); S.ui.calYear = TODAY.getFullYear();
     S.ui.calSel = TODAY_ISO; return render(); }
@@ -1274,7 +1359,9 @@ document.addEventListener('click', e => {
   if (d.save === 'reason'){
     const text = $('#f-rtext').value.trim(); if (!text) return $('#f-rtext').focus();
     const amt = parseFloat($('#f-ramt').value);
-    S.reasons.push({ id:'r'+uid(), text, amount: isNaN(amt) ? 0.5 : amt });
+    const val = { text, amount: isNaN(amt) ? 0.5 : amt };
+    if (editId) Object.assign(S.reasons.find(r => r.id === editId), val);
+    else S.reasons.push({ id:'r'+uid(), ...val });
     closeSheet(); return render();
   }
   if (d.save === 'chore'){
