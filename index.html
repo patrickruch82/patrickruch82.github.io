@@ -187,6 +187,8 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .p-head .hs span{flex:1;text-align:center;font-size:8.5px;line-height:19px;
   border-left:1px solid var(--line-soft);color:var(--muted);font-variant-numeric:tabular-nums}
 .p-head .hs span.bandstart{border-left-color:var(--line)}
+.p-head .hs span.aktiv{background:var(--ink);color:var(--paper);font-weight:700;
+  border-radius:3px;border-left-color:transparent}
 .p-head .hs span:first-child{border-left:none}
 .p-corner{left:0;z-index:6;font-size:9px;color:var(--muted)}
 .p-hcell{border-left:1px solid var(--line-soft)}
@@ -1491,6 +1493,13 @@ function initPlaner(){
   };
   /* Linker Rand und Breite eines Stundenschritts, für die Zielanzeige */
   const slotGeo = zeit => ({ left: slotOf(+zeit.slice(0,2)) / SLOTN * 100, width: 100 / SLOTN });
+  /* Die getroffenen Stunden oben in der Leiste hervorheben */
+  const stundenFelder = () => grid.querySelectorAll('.p-head .hs span');
+  function markiere(a, b){
+    stundenFelder().forEach((c, i) => c.classList.toggle('aktiv', a !== null && i >= a && i <= b));
+  }
+  const markWeg = () => markiere(null, null);
+
   /* Stundenschritt unter dem Finger */
   const slotAt = x => {
     const el = layer(); if (!el) return null;
@@ -1575,6 +1584,7 @@ function initPlaner(){
       st.evEl.style.left  = `calc(${(c1/SLOTN*100).toFixed(4)}% + 1px)`;
       st.evEl.style.width = `calc(${((c2-c1+1)/SLOTN*100).toFixed(4)}% - 2px)`;
       st.evEl.setAttribute('title', hh(SLOT0+c1) + '–' + hh(SLOT0+c2+1));
+      markiere(c1, c2);
       return;
     }
     st.px = e.clientX; st.py = e.clientY;
@@ -1585,8 +1595,8 @@ function initPlaner(){
     const d = dayAt(e.clientY - st.offY + st.h / 2);
     if (lay && d){
       const c1 = +st.evEl.dataset.c1, c2 = +st.evEl.dataset.c2;
-      const ganztags = (c1 === 0 && c2 === 2 && !st.hatZeit);
-      const zeit = ganztags ? null : timeAt(e.clientX + (st.w / 2) - st.offX);
+      const ganztags = (c2 - c1 + 1 === SLOTN) || !st.hatZeit;
+      const zeit = ganztags ? null : timeAt(e.clientX - st.offX + 1);
       const slot = document.createElement('div');
       slot.className = 'p-drop';
       slot.style.top = ((planerGeo ? planerGeo.off[d] : (d-1)*RH) + 2) + 'px';
@@ -1595,13 +1605,17 @@ function initPlaner(){
         slot.style.left = `calc(${(c1/3*100).toFixed(4)}% + 2px)`;
         slot.style.width = `calc(${((c2-c1+1)/3*100).toFixed(4)}% - 4px)`;
       } else {
-        const g = slotGeo(zeit);
-        slot.style.left = `calc(${g.left.toFixed(4)}% + 1px)`;
-        slot.style.width = `calc(${g.width.toFixed(4)}% - 2px)`;
-        slot.textContent = zeit;
+        const breite = c2 - c1 + 1;
+        const start = Math.min(SLOTN - breite, slotOf(+zeit.slice(0,2)));
+        slot.style.left  = `calc(${(start/SLOTN*100).toFixed(4)}% + 1px)`;
+        slot.style.width = `calc(${(breite/SLOTN*100).toFixed(4)}% - 2px)`;
+        slot.textContent = hh(SLOT0 + start);
+        markiere(start, start + breite - 1);
+        st.startSlot = start;
       }
+      if (ganztags) markWeg();
       lay.appendChild(slot);
-      st.target = { day: d, zeit: ganztags ? null : zeit };
+      st.target = { day: d, zeit: ganztags ? null : (st.startSlot != null ? hh(SLOT0 + st.startSlot) : zeit) };
     } else st.target = null;
   });
 
@@ -1611,6 +1625,7 @@ function initPlaner(){
     grid.querySelectorAll('.p-drop').forEach(n => n.remove());
     if (st.rz){
       document.body.classList.remove('dragging');
+      markWeg();
       if (st.evEl) st.evEl.classList.remove('dehnt');
       if (st.neu && st.id){
         const t = S.events.find(x => x.id === st.id);
@@ -1624,6 +1639,7 @@ function initPlaner(){
     }
     if (st.drag){
       if (autoTimer){ cancelAnimationFrame(autoTimer); autoTimer = null; }
+      markWeg();
       document.body.classList.remove('dragging');
       if (st.ghost) st.ghost.remove();
       if (st.evEl) st.evEl.classList.remove('ghosted');
@@ -1677,6 +1693,7 @@ function initPlaner(){
     const st = dragState;
     if (st && st.drag){
       toast('Verschieben abgebrochen. Tippe den Termin an, um ihn dort zu ändern.');
+      markWeg();
       if (autoTimer){ cancelAnimationFrame(autoTimer); autoTimer = null; }
       document.body.classList.remove('dragging');
       if (st.ghost) st.ghost.remove();
