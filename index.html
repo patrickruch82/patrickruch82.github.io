@@ -365,7 +365,7 @@ function refreshMembers(){
   M = Object.fromEntries(MEMBERS.map(m => [m.id, m]));
   KIDS = MEMBERS.filter(m => m.role === 'kid');
 }
-const mem = id => mem(id) || { id, name:'Unbekannt', color:'#8A8A8A', role:'other' };
+const mem = id => M[id] || { id, name:'Unbekannt', color:'#8A8A8A', role:'other' };
 const ini = m => (m.name || '?').slice(0, 2);
 
 
@@ -406,6 +406,56 @@ function seed(){ return {
   ui: { list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(),
         calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
 };}
+
+
+/* ============ Termine aus dem Papierkalender ============ */
+/* Alles, was auf den Fotos eindeutig lesbar war. Unter "Gemeinsam",
+   weil auf dem Papier keine Spaltenzuordnung erkennbar ist.
+   Feste Kennungen: nichts wird doppelt eingelesen, Gelöschtes bleibt gelöscht. */
+const G = 'gemeinsam';
+const IMPORT = [
+  { id:'p-2609-01a', member:G, title:'Elternabend',        date:'2026-09-01', time:'19:00' },
+  { id:'p-2609-03a', member:G, title:'Elternabend',        date:'2026-09-03', time:'19:00' },
+  { id:'p-2609-10a', member:G, title:'Frauenarzt',         date:'2026-09-10', time:'08:45' },
+  { id:'p-2609-12a', member:G, title:'Match',              date:'2026-09-12', time:'09:00' },
+  { id:'p-2609-14a', member:G, title:'Anna hüten',         date:'2026-09-14' },
+  { id:'p-2609-16a', member:G, title:'Europapark',         date:'2026-09-16', end:'2026-09-17' },
+  { id:'p-2609-19a', member:G, title:'Heso',               date:'2026-09-19' },
+  { id:'p-2609-23a', member:G, title:'Hyrox Pädu',         date:'2026-09-23' },
+  { id:'p-2609-24a', member:G, title:'Paul Foto',          date:'2026-09-24' },
+  { id:'p-2609-25a', member:G, title:'Bellach Heso',       date:'2026-09-25' },
+  { id:'p-2610-01a', member:G, title:'Hyrox Karlsruhe',    date:'2026-10-01', end:'2026-10-02' },
+  { id:'p-2610-03a', member:G, title:'Stowe',              date:'2026-10-03', end:'2026-10-04' },
+  { id:'p-2610-03b', member:G, title:'Adelboden',          date:'2026-10-03', end:'2026-10-04' },
+  { id:'p-2610-06a', member:G, title:'Anna Lager',         date:'2026-10-06', end:'2026-10-10' },
+  { id:'p-2610-10a', member:G, title:'Bärenlauf',          date:'2026-10-10' },
+  { id:'p-2610-11a', member:G, title:'Hyrox Genf',         date:'2026-10-11' },
+  { id:'p-2610-17a', member:G, title:'Match',              date:'2026-10-17', time:'13:35' },
+  { id:'p-2610-24a', member:G, title:'SM Aarau',           date:'2026-10-24' },
+  { id:'p-2610-26a', member:G, title:'Impfen Anna',        date:'2026-10-26', time:'14:50' },
+  { id:'p-2610-31a', member:G, title:'Cobretti-GV',        date:'2026-10-31' },
+  { id:'p-2611-07a', member:G, title:'Coiffeur',           date:'2026-11-07', time:'08:15' },
+  { id:'p-2611-07b', member:G, title:"L'Thaler Stadtlauf", date:'2026-11-07' },
+  { id:'p-2611-20a', member:G, title:'Musical',            date:'2026-11-20' },
+  { id:'p-2611-22a', member:G, title:'Paul Geburtstag',    date:'2026-11-22' },
+  { id:'p-2612-05a', member:G, title:'Hyrox Mailand',      date:'2026-12-05', end:'2026-12-06' },
+  { id:'p-2612-05b', member:G, title:'Match',              date:'2026-12-05', time:'14:30' },
+  { id:'p-2612-12a', member:G, title:'Charity-Event',      date:'2026-12-12' },
+  { id:'p-2701-09a', member:G, title:'Match',              date:'2027-01-09' },
+  { id:'p-2701-30a', member:G, title:'Match',              date:'2027-01-30' },
+  { id:'p-2702-26a', member:G, title:'Skiweekend Ka',      date:'2027-02-26', end:'2027-02-28' },
+  { id:'p-2703-12a', member:G, title:'Skiweekend Pädu',    date:'2027-03-12', end:'2027-03-14' },
+  { id:'p-2703-13a', member:G, title:'Match',              date:'2027-03-13' },
+  { id:'p-2703-15a', member:G, title:'Skilager',           date:'2027-03-15', end:'2027-03-19' }
+];
+
+/* Fügt fehlende Papiertermine hinzu. Was du löschst, bleibt gelöscht. */
+function applyImport(){
+  if (!Array.isArray(S.imported)) S.imported = [];
+  IMPORT.forEach(e => {
+    if (!S.imported.includes(e.id)){ S.events.push({ ...e }); S.imported.push(e.id); }
+  });
+}
 
 /* ============ Zustand ============ */
 const KEY = 'familienhub-v2';
