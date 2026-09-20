@@ -179,10 +179,11 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .p-corner{left:0;z-index:6}
 .p-hcell{border-left:1px solid var(--line-soft)}
 .p-hcell i{width:7px;height:7px;border-radius:50%}
-.p-stripe{grid-column:1/-1;z-index:0;background:var(--surface-2)}
-.p-stripe.hol{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-soft)}
+.p-rowline{grid-column:1/-1;z-index:0;border-bottom:1px solid var(--line-soft)}
+.p-rowline.we{background:var(--surface-2)}
 .p-day{position:sticky;left:0;z-index:4;background:var(--surface);
-  display:flex;align-items:center;gap:5px;padding:0 6px;font-size:12.5px;
+  display:flex;align-items:flex-start;gap:5px;padding:8px 6px 0;font-size:12.5px;
+  border-bottom:1px solid var(--line-soft);
   border-right:1px solid var(--line);text-align:left;width:100%}
 .p-day.we{background:var(--surface-2)}
 .p-day b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:14px;min-width:17px;text-align:right}
@@ -191,14 +192,13 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .p-day.red b{color:var(--alert)}
 .p-day[aria-pressed="true"]{background:var(--ink)}
 .p-day[aria-pressed="true"] b,.p-day[aria-pressed="true"] span,.p-day[aria-pressed="true"] u{color:var(--paper)}
-.p-col{position:relative;z-index:1;border-left:1px solid var(--line-soft);
-  background-image:repeating-linear-gradient(to bottom,var(--line-soft) 0 1px,transparent 1px var(--rh))}
+.p-col{position:relative;z-index:1;border-left:1px solid var(--line-soft)}
 .p-ev{position:absolute;border-radius:5px;padding:2px 5px;font-size:11px;line-height:1.25;
   overflow:hidden;border-left:2.5px solid var(--pc);color:var(--ink)}
 .p-ev b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;margin-right:3px}
 .p-legend{font-size:11.5px;color:var(--muted);margin-top:8px;text-align:center}
 
-.p-ev{cursor:grab;user-select:none;-webkit-user-select:none;
+.p-ev{cursor:grab;left:2px;right:2px;user-select:none;-webkit-user-select:none;
   -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 .p-col{-webkit-touch-callout:none}
 .p-ev.ghosted{opacity:.25}
@@ -365,12 +365,12 @@ const icon = (n, s = 20) =>
 
 /* ============ Stammdaten ============ */
 const MEMBERS_DEFAULT = [
+  { id:'gemeinsam', name:'Gemeinsam', color:'#A5701F', role:'shared' },
   { id:'ka',        name:'Ka',        color:'#6B3FA0', role:'parent', email:'ka@ruchsapp.ch' },
   { id:'paedu',     name:'Pädu',      color:'#1E3A6E', role:'parent', email:'patrick@ruchsapp.ch' },
   { id:'anna',      name:'Anna',      color:'#D9558B', role:'kid', allowance:13, email:'anna@ruchsapp.ch' },
   { id:'moritz',    name:'Moritz',    color:'#5C6670', role:'kid', allowance:10, email:'moritz@ruchsapp.ch' },
-  { id:'paul',      name:'Paul',      color:'#1F8A5B', role:'kid', allowance:6,  email:'paul@ruchsapp.ch' },
-  { id:'gemeinsam', name:'Gemeinsam', color:'#A5701F', role:'shared' }
+  { id:'paul',      name:'Paul',      color:'#1F8A5B', role:'kid', allowance:6,  email:'paul@ruchsapp.ch' }
 ];
 const REASONS_DEFAULT = [
   { id:'r1', text:'Znüni vergessen',        amount:.5 },
@@ -423,6 +423,8 @@ const PERM_LEVELS = [
 let MEMBERS = [], KIDS = [];
 let M = {};
 function refreshMembers(){
+  /* Die gemeinsame Spalte steht immer zuvorderst */
+  S.members.sort((a,b) => (a.role==='shared'?0:1) - (b.role==='shared'?0:1));
   MEMBERS = S.members;
   M = Object.fromEntries(MEMBERS.map(m => [m.id, m]));
   KIDS = MEMBERS.filter(m => m.role === 'kid');
@@ -1129,6 +1131,9 @@ function viewHome(){
 }
 
 /* ============ Kalender ============ */
+const RH = 34;                 // Höhe einer Terminzeile in Pixel
+let planerGeo = null;          // Zeilenhöhen des aktuellen Monats, fürs Ziehen
+
 function planerHTML(){
   const y = S.ui.calYear, mo = S.ui.calMonth, filt = S.ui.calFilter;
   const nDays = new Date(y, mo+1, 0).getDate();
@@ -1137,6 +1142,39 @@ function planerHTML(){
   const pad = n => String(n).padStart(2,'0');
   const first = `${y}-${pad(mo+1)}-01`, last = `${y}-${pad(mo+1)}-${pad(nDays)}`;
 
+  /* 1. Termine je Spalte sammeln und auf Zeilen verteilen.
+        Reihenfolge: Startzeit aufsteigend, Ganztägiges zuoberst. */
+  const spalten = cols.map(m => {
+    const evs = S.events
+      .filter(e => e.member === m.id && e.date <= last && evEnd(e) >= first)
+      .map(e => ({ ...e,
+        a: e.date < first ? 1 : new Date(e.date+'T00:00').getDate(),
+        b: evEnd(e) > last ? nDays : new Date(evEnd(e)+'T00:00').getDate() }))
+      .sort((x, z) => x.a - z.a
+        || (x.time||'').localeCompare(z.time||'')
+        || (z.b - z.a) - (x.b - x.a)
+        || x.title.localeCompare(z.title));
+
+    const belegt = [];            // je Zeile der zuletzt belegte Tag
+    evs.forEach(e => {
+      let l = belegt.findIndex(end => end < e.a);
+      if (l === -1){ l = belegt.length; belegt.push(0); }
+      belegt[l] = e.b; e.zeile = l;
+    });
+    return { m, evs };
+  });
+
+  /* 2. Wie viele Zeilen braucht jeder Tag? */
+  const zeilen = new Array(nDays + 2).fill(1);
+  spalten.forEach(sp => sp.evs.forEach(e => {
+    for (let d = e.a; d <= e.b; d++) zeilen[d] = Math.max(zeilen[d], e.zeile + 1);
+  }));
+  const hoehe = d => zeilen[d] * RH;
+  const off = new Array(nDays + 2).fill(0);
+  for (let d = 1; d <= nDays + 1; d++) off[d] = off[d-1] + (d > 1 ? hoehe(d-1) : 0);
+  planerGeo = { off, nDays };
+
+  /* 3. Aufbauen */
   let html = `<div class="p-corner" style="grid-area:1/1">KW</div>`;
   cols.forEach((m, i) => {
     html += `<div class="p-hcell" style="grid-row:1;grid-column:${i+2}">
@@ -1145,8 +1183,8 @@ function planerHTML(){
 
   for (let d = 1; d <= nDays; d++){
     const dt = new Date(y, mo, d), k = iso(dt), wd = dt.getDay();
-    if (wd === 0 || wd === 6 || hol[k])
-      html += `<div class="p-stripe" style="grid-row:${d+1}"></div>`;
+    const we = (wd === 0 || wd === 6 || hol[k]);
+    html += `<div class="p-rowline ${we?'we':''}" style="grid-row:${d+1}"></div>`;
   }
 
   for (let d = 1; d <= nDays; d++){
@@ -1157,36 +1195,22 @@ function planerHTML(){
       <b>${d}</b><span>${WD[wd]}</span><u>${wd===1?isoWeek(dt):''}</u></button>`;
   }
 
-  cols.forEach((m, ci) => {
-    const evs = S.events
-      .filter(e => e.member === m.id && e.date <= last && evEnd(e) >= first)
-      .map(e => ({ ...e,
-        a: e.date < first ? 1 : new Date(e.date+'T00:00').getDate(),
-        b: evEnd(e) > last ? nDays : new Date(evEnd(e)+'T00:00').getDate() }))
-      .sort((x, z) => x.a - z.a || (z.b - z.a) - (x.b - x.a));
-
-    const lanes = [];
-    evs.forEach(e => {
-      let l = lanes.findIndex(end => end < e.a);
-      if (l === -1){ l = lanes.length; lanes.push(0); }
-      lanes[l] = e.b; e.lane = l;
-    });
-    const L = Math.max(1, lanes.length);
-
-    const inner = evs.map(e => `<div class="p-ev" data-ev="${e.id}" style="--pc:${m.color};
-        background:${tint(m.color, .13)};
-        top:calc(var(--rh) * ${e.a-1} + 2px);
-        height:calc(var(--rh) * ${e.b - e.a + 1} - 4px);
-        left:calc(${(100/L*e.lane).toFixed(4)}% + 2px);width:calc(${(100/L).toFixed(4)}% - 3px)"
-        title="${esc(e.title)}">${e.time && e.a===e.b ? `<b>${e.time}</b>` : ''}${esc(e.title)}</div>`).join('');
-
-    html += `<div class="p-col" data-mcol="${m.id}" style="grid-row:2/-1;grid-column:${ci+2}">${inner}</div>`;
+  spalten.forEach((sp, ci) => {
+    const inner = sp.evs.map(e => {
+      const top = off[e.a] + e.zeile * RH;
+      const hgt = off[e.b] - off[e.a] + RH;
+      return `<div class="p-ev" data-ev="${e.id}" style="--pc:${sp.m.color};
+        background:${tint(sp.m.color, .13)};top:${top + 2}px;height:${hgt - 4}px"
+        title="${esc(e.title)}">${e.time ? `<b>${e.time}</b>` : ''}${esc(e.title)}</div>`;
+    }).join('');
+    html += `<div class="p-col" data-mcol="${sp.m.id}" style="grid-row:2/-1;grid-column:${ci+2}">${inner}</div>`;
   });
 
+  const rowsCss = Array.from({length:nDays}, (_,i) => hoehe(i+1) + 'px').join(' ');
   return `<div class="p-wrap"><div class="p-scroll"><div class="pgrid" data-days="${nDays}"
     data-y="${y}" data-mo="${mo}"
-    style="grid-template-columns:58px repeat(${cols.length},minmax(${cols.length>2?'92px':'150px'},1fr));
-           grid-template-rows:34px repeat(${nDays},var(--rh))">${html}</div></div></div>`;
+    style="grid-template-columns:58px repeat(${cols.length},minmax(${cols.length>2?'104px':'160px'},1fr));
+           grid-template-rows:34px ${rowsCss}">${html}</div></div></div>`;
 }
 
 function viewCal(){
@@ -1242,7 +1266,11 @@ function initPlaner(){
   });
   const dayAt = (col, y) => {
     const r = col.getBoundingClientRect();
-    return Math.min(nDays, Math.max(1, Math.floor((y - r.top) / (r.height / nDays)) + 1));
+    const rel = y - r.top;
+    const off = (planerGeo && planerGeo.off) || null;
+    if (!off) return Math.min(nDays, Math.max(1, Math.floor(rel / RH) + 1));
+    for (let d = 1; d <= nDays; d++) if (rel < off[d+1]) return d;
+    return nDays;
   };
 
   grid.addEventListener('pointerdown', e => {
@@ -1300,7 +1328,7 @@ function initPlaner(){
       const d = dayAt(col, e.clientY - st.offY + st.h / 2);
       const slot = document.createElement('div');
       slot.className = 'p-drop';
-      slot.style.top = `calc(var(--rh) * ${d-1} + 2px)`;
+      slot.style.top = ((planerGeo ? planerGeo.off[d] : (d-1)*RH) + 2) + 'px';
       slot.style.height = st.h + 'px';
       col.appendChild(slot);
       st.target = { member: col.dataset.mcol, day: d };
