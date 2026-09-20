@@ -308,7 +308,8 @@ const MEMBERS = [
   { id:'paedu',  name:'Pädu',   ini:'Pä', color:'#1E3A6E', kid:false },
   { id:'anna',   name:'Anna',   ini:'An', color:'#D9558B', kid:true, age:13 },
   { id:'moritz', name:'Moritz', ini:'Mo', color:'#5C6670', kid:true, age:10 },
-  { id:'paul',   name:'Paul',   ini:'Pa', color:'#1F8A5B', kid:true, age:6 }
+  { id:'paul',   name:'Paul',   ini:'Pa', color:'#1F8A5B', kid:true, age:6 },
+  { id:'gemeinsam', name:'Gemeinsam', ini:'Ge', color:'#A5701F', kid:false, shared:true }
 ];
 const M = Object.fromEntries(MEMBERS.map(m => [m.id, m]));
 const KIDS = MEMBERS.filter(m => m.kid);
@@ -330,80 +331,21 @@ const D = n => iso(addDays(TODAY, n));
 
 /* ============ Demodaten ============ */
 function seed(){ return {
-  events: [
-    { id:uid(), member:'paul',    title:'Kindergeburtstag Elin', time:'14:00', date:D(0),  place:'Familiengarten' },
-    { id:uid(), member:'paedu',   title:'Znacht kochen',         time:'18:00', date:D(0)  },
-    { id:uid(), member:'anna',   title:'Volleyballtraining',    time:'17:30', date:D(1),  place:'Turnhalle Dorf' },
-    { id:uid(), member:'moritz',   title:'Zahnarzt',              time:'15:15', date:D(1),  place:'Dr. Jacot' },
-    { id:uid(), member:'ka', title:'Elternabend 6. Klasse', time:'19:30', date:D(2),  place:'Schulhaus' },
-    { id:uid(), member:'paul',    title:'Schwimmkurs',           time:'16:00', date:D(2)  },
-    { id:uid(), member:'moritz',   title:'Fussballmatch',         time:'10:00', date:D(3),  place:'Sportplatz Buchsi' },
-    { id:uid(), member:'paedu',   title:'Homeoffice',            time:'08:00', date:D(3)  },
-    { id:uid(), member:'anna',   title:'Kino mit Nina',         time:'19:00', date:D(4)  },
-    { id:uid(), member:'ka', title:'Spätschicht',           time:'13:00', date:D(5)  },
-    { id:uid(), member:'paul',    title:'Schwimmkurs',           time:'16:00', date:D(9)  },
-    { id:uid(), member:'anna',   title:'Klassenlager',          time:'07:45', date:D(12), end:D(16), place:'Bahnhof' },
-    { id:uid(), member:'paedu',  title:'Skiweekend',                           date:D(5),  end:D(7) },
-    { id:uid(), member:'moritz', title:'Fussballcamp',                         date:D(19), end:D(22) }
-  ],
+  events: [],
   lists: [
-    { id:'migros', name:'Migros', items:[
-      { id:uid(), text:'Milch, 2 l',      done:false, by:'ka' },
-      { id:uid(), text:'Brot',            done:false, by:'paedu' },
-      { id:uid(), text:'Äpfel Gala',      done:true,  by:'ka' },
-      { id:uid(), text:'Znüni für Paul',   done:false, by:'paul' },
-      { id:uid(), text:'Joghurt, 6×',     done:false, by:'moritz' }
-    ]},
-    { id:'coop', name:'Coop', items:[
-      { id:uid(), text:'Waschmittel',     done:false, by:'paedu' },
-      { id:uid(), text:'Katzenfutter',    done:false, by:'anna' }
-    ]},
-    { id:'drog', name:'Drogerie', items:[
-      { id:uid(), text:'Sonnencreme',     done:true,  by:'ka' },
-      { id:uid(), text:'Zahnpasta',       done:false, by:'ka' }
-    ]}
+    { id:'migros', name:'Migros',   items:[] },
+    { id:'coop',   name:'Coop',     items:[] },
+    { id:'drog',   name:'Drogerie', items:[] }
   ],
-  menu: [
-    { day:'Mo', meal:'Spaghetti Bolognese', zutaten:['Hackfleisch 400 g','Spaghetti','Pelati'] },
-    { day:'Di', meal:'Gemüsecurry',         zutaten:['Kokosmilch','Rüebli','Basmatireis'] },
-    { day:'Mi', meal:'Älplermagronen',      zutaten:['Hörnli','Kartoffeln','Apfelmus'] },
-    { day:'Do', meal:'Fischstäbchen',       zutaten:['Fischstäbchen','Erbsen'] },
-    { day:'Fr', meal:'Pizza selber machen', zutaten:['Mozzarella','Hefe','Tomatensauce'] }
-  ],
-  school: [
-    { id:uid(), member:'anna', kind:'pruefung', subject:'Mathe',     title:'Gleichungen',        due:D(3), done:false },
-    { id:uid(), member:'anna', kind:'pruefung', subject:'Französisch',title:'Unité 2, Vokabeln', due:D(8), done:false },
-    { id:uid(), member:'moritz', kind:'pruefung', subject:'NMG',       title:'Wald und Tiere',     due:D(5), done:false },
-    { id:uid(), member:'anna', kind:'hausaufgabe', subject:'Deutsch', title:'Aufsatz Seite 24',  due:D(1), done:false },
-    { id:uid(), member:'anna', kind:'hausaufgabe', subject:'Mathe',   title:'Arbeitsblatt 12',   due:D(1), done:true },
-    { id:uid(), member:'moritz', kind:'hausaufgabe', subject:'Deutsch', title:'Lesen, 15 Min.',    due:D(0), done:false },
-    { id:uid(), member:'moritz', kind:'hausaufgabe', subject:'Mathe',   title:'Rechnen bis 1000',  due:D(2), done:false },
-    { id:uid(), member:'paul',  kind:'hausaufgabe', subject:'Lesen',   title:'Buchstabe M üben',  due:D(1), done:false }
-  ],
-  chores: [
-    { id:uid(), member:'anna', title:'Abfall rausbringen',   rhythm:'Mo, Do',      done:[D(-3)] },
-    { id:uid(), member:'anna', title:'Geschirrspüler leeren', rhythm:'täglich',    done:[D(-2),D(-1)] },
-    { id:uid(), member:'moritz', title:'Tisch decken',          rhythm:'täglich',    done:[D(-2),D(-1),D(0)] },
-    { id:uid(), member:'moritz', title:'Katze füttern',         rhythm:'täglich',    done:[D(-1)] },
-    { id:uid(), member:'paul',  title:'Schuhe versorgen',      rhythm:'täglich',    done:[D(0)] },
-    { id:uid(), member:'paul',  title:'Spielsachen aufräumen', rhythm:'Mi, Sa',     done:[] }
-  ],
-  strikes: [
-    { id:uid(), member:'anna', reason:'Turnsack vergessen',    date:D(-4), amount:.5 },
-    { id:uid(), member:'anna', reason:'Handy am Tisch',        date:D(-2), amount:.5 },
-    { id:uid(), member:'moritz', reason:'Znüni vergessen',       date:D(-5), amount:.5 },
-    { id:uid(), member:'moritz', reason:'Znüni vergessen',       date:D(-1), amount:.5 },
-    { id:uid(), member:'moritz', reason:'Ämtli nicht gemacht',   date:D(-3), amount:1 },
-    { id:uid(), member:'paul',  reason:'Jacke liegen gelassen', date:D(-2), amount:.5 }
-  ],
-  chat: [
-    { id:uid(), member:'ka', text:'Wer holt Paul um 16 Uhr vom Schwimmen ab?', t:'08:12' },
-    { id:uid(), member:'paedu',   text:'Ich mach das, bin eh in der Nähe.',        t:'08:15' },
-    { id:uid(), member:'anna',   text:'Kann ich Freitag bei Nina übernachten?',   t:'09:40' },
-    { id:uid(), member:'ka', text:'Fragen wir heute Abend am Tisch.',         t:'09:41' },
-    { id:uid(), member:'moritz',   text:'Mein Fussballmatch ist verschoben, jetzt Mittwoch!', t:'11:02' }
-  ],
-  ui: { calView:'planer', list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(), calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
+  menu: [],
+  school: [],
+  chores: [],
+  strikes: [],
+  chat: [],
+  imported: [],
+  cleaned: true,
+  ui: { calView:'planer', list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(),
+        calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
 };}
 
 const REASONS = [
@@ -413,6 +355,62 @@ const REASONS = [
 ];
 const SACKGELD = { anna:13, moritz:10, paul:6 };   // CHF pro Woche, Auszahlung sonntags
 
+
+/* ============ Termine aus dem Papierkalender ============ */
+/* Alles, was auf den Fotos eindeutig lesbar war. Unter "Gemeinsam",
+   weil auf dem Papier keine Spaltenzuordnung erkennbar ist.
+   Feste Kennungen, damit nichts doppelt eingelesen wird und
+   Gelöschtes gelöscht bleibt. */
+const G = 'gemeinsam';
+const IMPORT = [
+  // September 2026
+  { id:'p-2609-01a', member:G, title:'Elternabend',        date:'2026-09-01', time:'19:00' },
+  { id:'p-2609-03a', member:G, title:'Elternabend',        date:'2026-09-03', time:'19:00' },
+  { id:'p-2609-10a', member:G, title:'Frauenarzt',         date:'2026-09-10', time:'08:45' },
+  { id:'p-2609-12a', member:G, title:'Match',              date:'2026-09-12', time:'09:00' },
+  { id:'p-2609-14a', member:G, title:'Anna hüten',         date:'2026-09-14' },
+  { id:'p-2609-16a', member:G, title:'Europapark',         date:'2026-09-16', end:'2026-09-17' },
+  { id:'p-2609-19a', member:G, title:'Heso',               date:'2026-09-19' },
+  { id:'p-2609-23a', member:G, title:'Hyrox Pädu',         date:'2026-09-23' },
+  { id:'p-2609-24a', member:G, title:'Paul Foto',          date:'2026-09-24' },
+  { id:'p-2609-25a', member:G, title:'Bellach Heso',       date:'2026-09-25' },
+  // Oktober 2026
+  { id:'p-2610-01a', member:G, title:'Hyrox Karlsruhe',    date:'2026-10-01', end:'2026-10-02' },
+  { id:'p-2610-03a', member:G, title:'Stowe',              date:'2026-10-03', end:'2026-10-04' },
+  { id:'p-2610-03b', member:G, title:'Adelboden',          date:'2026-10-03', end:'2026-10-04' },
+  { id:'p-2610-06a', member:G, title:'Anna Lager',         date:'2026-10-06', end:'2026-10-10' },
+  { id:'p-2610-10a', member:G, title:'Bärenlauf',          date:'2026-10-10' },
+  { id:'p-2610-11a', member:G, title:'Hyrox Genf',         date:'2026-10-11' },
+  { id:'p-2610-17a', member:G, title:'Match',              date:'2026-10-17', time:'13:35' },
+  { id:'p-2610-24a', member:G, title:'SM Aarau',           date:'2026-10-24' },
+  { id:'p-2610-26a', member:G, title:'Impfen Anna',        date:'2026-10-26', time:'14:50' },
+  { id:'p-2610-31a', member:G, title:'Cobretti-GV',        date:'2026-10-31' },
+  // November 2026
+  { id:'p-2611-07a', member:G, title:'Coiffeur',           date:'2026-11-07', time:'08:15' },
+  { id:'p-2611-07b', member:G, title:"L'Thaler Stadtlauf", date:'2026-11-07' },
+  { id:'p-2611-20a', member:G, title:'Musical',            date:'2026-11-20' },
+  { id:'p-2611-22a', member:G, title:'Paul Geburtstag',    date:'2026-11-22' },
+  // Dezember 2026
+  { id:'p-2612-05a', member:G, title:'Hyrox Mailand',      date:'2026-12-05', end:'2026-12-06' },
+  { id:'p-2612-05b', member:G, title:'Match',              date:'2026-12-05', time:'14:30' },
+  { id:'p-2612-12a', member:G, title:'Charity-Event',      date:'2026-12-12' },
+  // 2027, aus der Jahresübersicht
+  { id:'p-2701-09a', member:G, title:'Match',              date:'2027-01-09' },
+  { id:'p-2701-30a', member:G, title:'Match',              date:'2027-01-30' },
+  { id:'p-2702-26a', member:G, title:'Skiweekend Ka',      date:'2027-02-26', end:'2027-02-28' },
+  { id:'p-2703-12a', member:G, title:'Skiweekend Pädu',    date:'2027-03-12', end:'2027-03-14' },
+  { id:'p-2703-13a', member:G, title:'Match',              date:'2027-03-13' },
+  { id:'p-2703-15a', member:G, title:'Skilager',           date:'2027-03-15', end:'2027-03-19' }
+];
+
+/* Fügt fehlende Papiertermine hinzu. Was du löschst, bleibt gelöscht. */
+function applyImport(){
+  if (!Array.isArray(S.imported)) S.imported = [];
+  IMPORT.forEach(e => {
+    if (!S.imported.includes(e.id)){ S.events.push({ ...e }); S.imported.push(e.id); }
+  });
+}
+
 /* ============ Zustand ============ */
 const KEY = 'familienhub-v2';
 let S;
@@ -420,6 +418,20 @@ try { const raw = localStorage.getItem(KEY); S = raw ? JSON.parse(raw) : seed();
 catch(e){ S = seed(); }
 if (!S || !S.events) S = seed();
 if (!S.ui.calView) S.ui.calView = 'planer';
+
+/* Einmalig: die ursprünglichen Beispieldaten entfernen.
+   Die aus dem Papierkalender übernommenen Termine (Kennung p-…) bleiben. */
+if (!S.cleaned){
+  S.events  = (S.events || []).filter(e => String(e.id).startsWith('p-'));
+  S.lists   = (S.lists || []).map(l => ({ ...l, items: [] }));
+  S.menu    = [];
+  S.school  = [];
+  S.chores  = [];
+  S.strikes = [];
+  S.chat    = [];
+  S.cleaned = true;
+}
+applyImport();
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
 
 /* ============ Helfer ============ */
@@ -567,7 +579,7 @@ function viewHome(){
   </section>
   </div>
 
-  <p class="footnote">Prototyp mit Beispieldaten. <button data-reset>Demodaten zurücksetzen</button></p>`;
+  <p class="footnote">Ruchs Organisations App · <button data-reset>Alles zurücksetzen</button></p>`;
 }
 
 /* ============ Kalender ============ */
@@ -734,13 +746,15 @@ function viewShop(){
   </div>
 
   <section class="sec">
-    <div class="sec-head"><h2>Wochenmenü</h2><span class="hint">Zutaten in die Liste übernehmen</span></div>
+    <div class="sec-head"><h2>Wochenmenü</h2>
+      <button class="btn ghost" data-sheet="menu">${icon('plus',15)} Menü</button></div>
     <div class="card">
-      ${S.menu.map((m,ix) => `<div class="row">
+      ${S.menu.length ? S.menu.map((m,ix) => `<div class="row">
         <div class="body"><div class="t">${m.day} · ${esc(m.meal)}</div>
-          <div class="s">${m.zutaten.map(esc).join(', ')}</div></div>
-        <button class="linkbtn" data-menu="${ix}">Übernehmen</button>
-      </div>`).join('')}
+          <div class="s">${(m.zutaten||[]).map(esc).join(', ') || 'keine Zutaten hinterlegt'}</div></div>
+        ${(m.zutaten||[]).length ? `<button class="linkbtn" data-menu="${ix}">Übernehmen</button>` : ''}
+        <button class="linkbtn" data-delmenu="${ix}" aria-label="Menü löschen">×</button>
+      </div>`).join('') : '<div class="empty">Noch kein Menü geplant. Zutaten lassen sich später mit einem Tipp in die Einkaufsliste übernehmen.</div>'}
     </div>
   </section>`;
 }
@@ -790,7 +804,8 @@ function viewSchool(){
 function viewChores(){
   return `
   <section class="sec">
-    <div class="sec-head"><h2>Ämtli heute</h2><span class="hint">${WDL[TODAY.getDay()]}</span></div>
+    <div class="sec-head"><h2>Ämtli heute</h2>
+      <button class="btn ghost" data-sheet="chore">${icon('plus',15)} Ämtli</button></div>
     ${KIDS.map(k => `
       <div class="card" style="--pc:${k.color}">
         <div style="display:flex;align-items:center;gap:10px">
@@ -799,11 +814,12 @@ function viewChores(){
             <div style="font-size:12.5px;color:var(--muted)">${choresOf(k.id).length - openChoresToday(k.id)} von ${choresOf(k.id).length} erledigt</div></div>
         </div>
         <div style="margin-top:6px">
-          ${choresOf(k.id).map(c => { const d = c.done.includes(TODAY_ISO); return `
+          ${choresOf(k.id).length ? choresOf(k.id).map(c => { const d = c.done.includes(TODAY_ISO); return `
             <div class="row ${d?'done':''}" style="--pc:${k.color}">
               <button class="check" data-chore="${c.id}" aria-pressed="${d}" aria-label="Erledigt">${icon('check',13)}</button>
               <div class="body"><div class="t">${esc(c.title)}</div><div class="s">${esc(c.rhythm)}</div></div>
-            </div>`; }).join('')}
+              <button class="linkbtn" data-delchore="${c.id}" aria-label="Ämtli löschen">×</button>
+            </div>`; }).join('') : '<div class="empty">Noch kein Ämtli für ' + k.name + '.</div>'}
         </div>
       </div>`).join('')}
   </section>
@@ -862,6 +878,18 @@ function openSheet(kind){
     <div class="field"><label for="f-end">Bis (nur bei mehrtägigem, sonst leer lassen)</label><input id="f-end" type="date"></div>
     <div class="field"><label for="f-place">Wo (optional)</label><input id="f-place" placeholder="Ort"></div>
     <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="event">Termin sichern</button></div>`
+  : kind === 'chore' ? `
+    <h3>Neues Ämtli</h3>
+    <div class="field"><label for="f-mem">Kind</label><select id="f-mem">${KIDS.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+    <div class="field"><label for="f-title">Was</label><input id="f-title" placeholder="z. B. Abfall rausbringen"></div>
+    <div class="field"><label for="f-rhythm">Wie oft</label><input id="f-rhythm" placeholder="täglich, Mo/Do, wöchentlich …" value="täglich"></div>
+    <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="chore">Ämtli sichern</button></div>`
+  : kind === 'menu' ? `
+    <h3>Neues Menü</h3>
+    <div class="field"><label for="f-day">Tag</label><select id="f-day">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<option>${d}</option>`).join('')}</select></div>
+    <div class="field"><label for="f-meal">Gericht</label><input id="f-meal" placeholder="z. B. Älplermagronen"></div>
+    <div class="field"><label for="f-zut">Zutaten, mit Komma getrennt</label><input id="f-zut" placeholder="Hörnli, Kartoffeln, Apfelmus"></div>
+    <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="menu">Menü sichern</button></div>`
   : `
     <h3>Neuer Schuleintrag</h3>
     <div class="field"><label for="f-kind">Art</label><select id="f-kind">
@@ -887,7 +915,10 @@ document.addEventListener('click', e => {
 
   if (d.tab){ tab = d.tab; window.scrollTo(0,0); return render(); }
   if (d.go){ tab = d.go; window.scrollTo(0,0); return render(); }
-  if ('reset' in d){ S = seed(); return render(); }
+  if ('reset' in d){
+    if (!confirm('Alle Einträge löschen? Die Termine aus dem Papierkalender werden neu eingelesen, alles andere ist weg.')) return;
+    S = seed(); applyImport(); return render();
+  }
   if ('close' in d) return closeSheet();
   if (d.sheet) return openSheet(d.sheet);
 
@@ -919,6 +950,8 @@ document.addEventListener('click', e => {
     c.done = c.done.includes(TODAY_ISO) ? c.done.filter(x=>x!==TODAY_ISO) : [...c.done, TODAY_ISO];
     return render();
   }
+  if (d.delchore){ S.chores = S.chores.filter(c => c.id !== d.delchore); return render(); }
+  if (d.delmenu){ S.menu.splice(+d.delmenu, 1); return render(); }
   if (d.strike){ const [m,r,a] = d.strike.split('|');
     S.strikes.push({ id:uid(), member:m, reason:r, date:TODAY_ISO, amount:parseFloat(a) }); return render(); }
   if (d.unstrike){ S.strikes = S.strikes.filter(s=>s.id!==d.unstrike); return render(); }
@@ -932,6 +965,18 @@ document.addEventListener('click', e => {
       time:$('#f-time').value, place:$('#f-place').value.trim(),
       ...(end && end > $('#f-date').value ? { end } : {}) });
     S.ui.calSel = $('#f-date').value; closeSheet(); return render();
+  }
+  if (d.save === 'chore'){
+    const title = $('#f-title').value.trim(); if (!title) return $('#f-title').focus();
+    S.chores.push({ id:uid(), member:$('#f-mem').value, title,
+      rhythm:$('#f-rhythm').value.trim() || 'täglich', done:[] });
+    closeSheet(); return render();
+  }
+  if (d.save === 'menu'){
+    const meal = $('#f-meal').value.trim(); if (!meal) return $('#f-meal').focus();
+    S.menu.push({ day:$('#f-day').value, meal,
+      zutaten:$('#f-zut').value.split(',').map(z => z.trim()).filter(Boolean) });
+    closeSheet(); return render();
   }
   if (d.save === 'school'){
     const title = $('#f-title').value.trim(); if (!title) return $('#f-title').focus();
