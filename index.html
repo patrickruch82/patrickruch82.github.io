@@ -214,7 +214,8 @@ body.dragging .p-scroll{touch-action:none}
 .lockbox{width:100%;max-width:380px;text-align:center}
 .lockbox h2{font-size:21px;margin-top:10px}
 .lockhint{color:var(--muted);font-size:13.5px;margin:6px 0 20px}
-.lockgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:12px}
+.lockgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:12px}
+.lockperson .avatar{margin-bottom:2px}
 .lockperson{display:flex;flex-direction:column;align-items:center;gap:7px;
   padding:14px 6px;border:1px solid var(--line-soft);border-radius:var(--radius);
   background:var(--surface);font-size:13px;font-weight:500}
@@ -850,45 +851,87 @@ function startPolling(){
   });
 }
 
-/* ---- Anmeldebildschirm ---- */
-let loginBusy = false;
+/* ---- Anmeldebildschirm: Kacheln, dann Passwort ---- */
+let loginBusy = false, loginPick = null, loginManual = false;
+
 function showLogin(msg){
   const el = $('#lock');
-  el.innerHTML = `
-    <div class="lockbox">
-      <h2>Ruchs Organisations App</h2>
-      <p class="lockhint">Melde dich an</p>
-      <div class="field"><label for="loginMail">E-Mail</label>
-        <input id="loginMail" type="email" autocomplete="username" inputmode="email"></div>
-      <div class="field"><label for="loginPass">Passwort</label>
-        <input id="loginPass" type="password" autocomplete="current-password"></div>
-      ${msg ? `<p class="lockerr">${esc(msg)}</p>` : ''}
-      <div class="lockact"><button class="btn" data-dologin style="flex:1">Anmelden</button></div>
-    </div>`;
+  const leute = MEMBERS.filter(m => m.role !== 'shared' && m.email);
+
+  if (!loginPick && !loginManual && leute.length){
+    el.innerHTML = `
+      <div class="lockbox">
+        <h2>Ruchs Organisations App</h2>
+        <p class="lockhint">Wer bist du?</p>
+        <div class="lockgrid">
+          ${leute.map(m => `<button class="lockperson" data-loginpick="${m.id}">
+            ${av(m.id,'xl')}<span>${esc(m.name)}</span></button>`).join('')}
+        </div>
+        ${msg ? `<p class="lockerr">${esc(msg)}</p>` : ''}
+        <button class="linkbtn" data-loginmanual style="margin-top:16px">Andere Anmeldung</button>
+      </div>`;
+  } else if (loginPick){
+    const m = mem(loginPick);
+    el.innerHTML = `
+      <div class="lockbox">
+        ${av(loginPick,'xl')}
+        <h2>${esc(m.name)}</h2>
+        <p class="lockhint">${esc(m.email || '')}</p>
+        <input id="loginMail" type="hidden" value="${esc(m.email || '')}">
+        <div class="field"><label for="loginPass">Passwort</label>
+          <input id="loginPass" type="password" autocomplete="current-password"></div>
+        ${msg ? `<p class="lockerr">${esc(msg)}</p>` : ''}
+        <div class="lockact">
+          <button class="btn ghost" data-loginback>Zurück</button>
+          <button class="btn" data-dologin>Anmelden</button>
+        </div>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <div class="lockbox">
+        <h2>Ruchs Organisations App</h2>
+        <p class="lockhint">Melde dich an</p>
+        <div class="field"><label for="loginMail">E-Mail</label>
+          <input id="loginMail" type="email" autocomplete="username" inputmode="email"></div>
+        <div class="field"><label for="loginPass">Passwort</label>
+          <input id="loginPass" type="password" autocomplete="current-password"></div>
+        ${msg ? `<p class="lockerr">${esc(msg)}</p>` : ''}
+        <div class="lockact">
+          ${leute.length ? '<button class="btn ghost" data-loginback>Zurück</button>' : ''}
+          <button class="btn" data-dologin style="flex:1">Anmelden</button>
+        </div>
+      </div>`;
+  }
   el.classList.add('on');
-  setTimeout(() => { const i = document.getElementById('loginMail'); if (i) i.focus(); }, 120);
+  setTimeout(() => {
+    const f = document.getElementById('loginPass') || document.getElementById('loginMail');
+    if (f && f.type !== 'hidden') f.focus();
+  }, 140);
 }
 function hideLock(){ $('#lock').classList.remove('on'); }
 
 async function doLogin(){
   if (loginBusy) return;
-  const mail = ($('#loginMail').value || '').trim();
-  const pass = $('#loginPass').value || '';
-  if (!mail || !pass) return showLogin('E-Mail und Passwort ausfüllen.');
+  const mail = ($('#loginMail') ? $('#loginMail').value : '').trim();
+  const pass = $('#loginPass') ? $('#loginPass').value : '';
+  if (!mail) return showLogin('E-Mail fehlt.');
+  if (!pass) return showLogin('Passwort eingeben.');
   loginBusy = true; showLogin('Einen Moment …');
   try {
     await login(mail, pass);
-    loginBusy = false;
+    loginBusy = false; loginPick = null; loginManual = false;
     await afterLogin();
   } catch (err){
     loginBusy = false;
-    showLogin(String(err.message).includes('credentials') ? 'E-Mail oder Passwort stimmt nicht.' : err.message);
+    const t = String(err.message || '');
+    showLogin(/credential|invalid/i.test(t) ? 'Passwort stimmt nicht.' : t);
   }
 }
 
 function logout(){
   saveAuth(null);
   clearInterval(pollTimer);
+  loginPick = null; loginManual = false;
   showLogin();
 }
 
@@ -1639,6 +1682,9 @@ document.addEventListener('click', e => {
   if ('close' in d) return closeSheet();
   if (d.sheet) return openSheet(d.sheet);
 
+  if (d.loginpick){ loginPick = d.loginpick; loginManual = false; return showLogin(); }
+  if ('loginback' in d){ loginPick = null; loginManual = false; return showLogin(); }
+  if ('loginmanual' in d){ loginPick = null; loginManual = true; return showLogin(); }
   if ('dologin' in d){ return doLogin(); }
   if ('logout' in d){ return logout(); }
   if (d.me){ return toast('Die Person ergibt sich aus der Anmeldung.'); }
