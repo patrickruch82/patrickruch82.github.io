@@ -223,6 +223,11 @@ body.dragging .p-scroll{touch-action:none}
 .pin{width:100%;text-align:center;font-size:24px;letter-spacing:8px;
   background:var(--surface);border:1px solid var(--line);border-radius:12px;
   padding:12px;font-family:"Bricolage Grotesque",sans-serif}
+.lockerr{color:var(--alert);font-size:13px;margin:10px 0 0}
+.lockbox .field{text-align:left}
+.netdot{width:9px;height:9px;border-radius:50%;flex:none;align-self:center}
+.netdot.on{background:#1F8A5B}
+.netdot.off{background:#C9A227}
 .lockact{display:flex;gap:10px;margin-top:16px}
 .lockact .btn{flex:1}
 .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom,0px));
@@ -305,6 +310,7 @@ body.dragging .p-scroll{touch-action:none}
       <h1 id="topTitle">Startseite</h1>
     </div>
     <div style="display:flex;align-items:center;gap:2px">
+      <span class="netdot off" id="netdot" title="Verbindung"></span>
       <button class="iconbtn" id="meBtn" title="Profile und Rechte" aria-label="Profile und Rechte"></button>
       <button class="iconbtn" id="themeBtn" title="Hell / Dunkel" aria-label="Hell oder Dunkel umschalten"></button>
     </div>
@@ -342,11 +348,11 @@ const icon = (n, s = 20) =>
 
 /* ============ Stammdaten ============ */
 const MEMBERS_DEFAULT = [
-  { id:'ka',        name:'Ka',        color:'#6B3FA0', role:'parent' },
-  { id:'paedu',     name:'Pädu',      color:'#1E3A6E', role:'parent' },
-  { id:'anna',      name:'Anna',      color:'#D9558B', role:'kid', allowance:13 },
-  { id:'moritz',    name:'Moritz',    color:'#5C6670', role:'kid', allowance:10 },
-  { id:'paul',      name:'Paul',      color:'#1F8A5B', role:'kid', allowance:6 },
+  { id:'ka',        name:'Ka',        color:'#6B3FA0', role:'parent', email:'ka@ruchsapp.ch' },
+  { id:'paedu',     name:'Pädu',      color:'#1E3A6E', role:'parent', email:'patrick@ruchsapp.ch' },
+  { id:'anna',      name:'Anna',      color:'#D9558B', role:'kid', allowance:13, email:'anna@ruchsapp.ch' },
+  { id:'moritz',    name:'Moritz',    color:'#5C6670', role:'kid', allowance:10, email:'moritz@ruchsapp.ch' },
+  { id:'paul',      name:'Paul',      color:'#1F8A5B', role:'kid', allowance:6,  email:'paul@ruchsapp.ch' },
   { id:'gemeinsam', name:'Gemeinsam', color:'#A5701F', role:'shared' }
 ];
 const REASONS_DEFAULT = [
@@ -438,7 +444,6 @@ function seed(){ return {
   reasons: REASONS_DEFAULT.map(r => ({ ...r })),
   perms: { ...PERMS_DEFAULT },
   allowance: { ...ALLOWANCE_DEFAULT },
-  auth: { required:false },
   me: 'ka',
   ui: { list:'lebensmittel', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(),
         calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
@@ -504,8 +509,9 @@ if (!Array.isArray(S.members) || !S.members.length) S.members = MEMBERS_DEFAULT.
 if (!Array.isArray(S.reasons) || !S.reasons.length) S.reasons = REASONS_DEFAULT.map(r => ({ ...r }));
 S.perms = { ...PERMS_DEFAULT, ...(S.perms || {}) };
 S.allowance = { ...ALLOWANCE_DEFAULT, ...(S.allowance || {}) };
-S.auth = { required:false, ...(S.auth || {}) };
 if (!S.me || !S.members.some(m => m.id === S.me)) S.me = S.members[0].id;
+MEMBERS_DEFAULT.forEach(d => { const m = (S.members||[]).find(x => x.id === d.id);
+  if (m && !m.email && d.email) m.email = d.email; });
 refreshMembers();
 if (!S.listsV2){
   const alte = (S.lists || []).flatMap(l => l.items || []);
@@ -515,6 +521,8 @@ if (!S.listsV2){
   S.listsV2 = true;
 }
 if (!S.lists.some(l => l.id === S.ui.list)) S.ui.list = S.lists[0].id;
+S.menu.forEach(m => { if (!m.id) m.id = 'n'+uid(); });
+S.chat.forEach(m => { if (!m.at) m.at = new Date().toISOString(); });
 
 /* Einmalig: die ursprünglichen Beispieldaten entfernen.
    Die aus dem Papierkalender übernommenen Termine (Kennung p-…) bleiben. */
@@ -529,7 +537,9 @@ if (!S.cleaned){
   S.cleaned = true;
 }
 applyImport();
-function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
+function saveLocal(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
+function loadLocal(){ try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){ return null; } }
+function save(){ saveLocal(); if (typeof scheduleSync === 'function') scheduleSync(); }
 
 /* ============ Helfer ============ */
 const ev = (a,b) => (a.time||'').localeCompare(b.time||'');
@@ -637,65 +647,285 @@ function toast(msg){
 }
 const deny = () => toast('Dafür fehlt dir die Berechtigung.');
 
-/* ============ Anmeldung ============ */
-/* Achtung: Der Code liegt im Browser, das ist eine Kindersicherung
-   und keine Sicherheit. Echte Anmeldung kommt mit der Datenbank. */
-const SKEY = KEY + '-session';
-let session = null;
-try { session = localStorage.getItem(SKEY); } catch(e){}
+/* ============ Datenbank und Anmeldung (Supabase) ============ */
+const SB_URL = 'https://qqlltyzrnwcsgmvcydwe.supabase.co';
+const SB_KEY = 'sb_publishable_haSjCOJE0YSqwJZZwqr8Uw_p1q_J--D';
+const TKEY = KEY + '-token';
 
-const needsLogin = () => S.auth.required && !(session && M[session]);
+let auth = null;            // { access_token, refresh_token, expires_at, email }
+let online = false;         // letzte Übertragung erfolgreich
+let syncTimer = null, pollTimer = null;
+try { auth = JSON.parse(localStorage.getItem(TKEY) || 'null'); } catch(e){}
 
-function setSession(id){
-  session = id; S.me = id;
-  try { localStorage.setItem(SKEY, id); } catch(e){}
-}
-function logout(){
-  session = null;
-  try { localStorage.removeItem(SKEY); } catch(e){}
-  boot();
+function saveAuth(a){
+  auth = a;
+  try { a ? localStorage.setItem(TKEY, JSON.stringify(a)) : localStorage.removeItem(TKEY); } catch(e){}
 }
 
-let lockPick = null;
-function showLock(){
+async function sbAuth(path, body){
+  const r = await fetch(`${SB_URL}/auth/v1/${path}`, {
+    method:'POST',
+    headers:{ 'apikey':SB_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'Anmeldung fehlgeschlagen');
+  return j;
+}
+
+async function login(email, pass){
+  const j = await sbAuth('token?grant_type=password', { email, password:pass });
+  saveAuth({ access_token:j.access_token, refresh_token:j.refresh_token,
+             expires_at: Date.now() + (j.expires_in || 3600)*1000,
+             email: (j.user && j.user.email) || email });
+  return auth;
+}
+
+async function refreshToken(){
+  if (!auth || !auth.refresh_token) return false;
+  try {
+    const j = await sbAuth('token?grant_type=refresh_token', { refresh_token: auth.refresh_token });
+    saveAuth({ access_token:j.access_token, refresh_token:j.refresh_token,
+               expires_at: Date.now() + (j.expires_in || 3600)*1000, email: auth.email });
+    return true;
+  } catch(e){ saveAuth(null); return false; }
+}
+
+async function sbRest(path, opts){
+  opts = opts || {};
+  if (!auth) throw new Error('nicht angemeldet');
+  if (auth.expires_at - Date.now() < 60000) await refreshToken();
+  if (!auth) throw new Error('nicht angemeldet');
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method: opts.method || 'GET',
+    headers: Object.assign({
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + auth.access_token,
+      'Content-Type': 'application/json'
+    }, opts.headers || {}),
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  if (r.status === 401){ if (await refreshToken()) return sbRest(path, opts); throw new Error('Sitzung abgelaufen'); }
+  if (!r.ok) throw new Error('Datenbank: ' + r.status + ' ' + (await r.text()).slice(0,140));
+  return r.status === 204 ? null : r.json();
+}
+
+/* ---- Umrechnung zwischen App-Zustand und Tabellenzeilen ---- */
+const nz = v => (v === undefined || v === '') ? null : v;
+const TABLES = {
+  members: {
+    rows: () => S.members.map((m,i) => ({ id:m.id, name:m.name, color:m.color, role:m.role,
+      allowance: m.allowance ?? 0, photo: nz(m.photo), email: nz(m.email), sort:i })),
+    load: rs => { S.members = rs.sort((a,b)=>(a.sort||0)-(b.sort||0)).map(r => ({
+      id:r.id, name:r.name, color:r.color, role:r.role,
+      ...(r.role==='kid' ? { allowance:Number(r.allowance)||0 } : {}),
+      ...(r.photo ? { photo:r.photo } : {}), ...(r.email ? { email:r.email } : {}) })); }
+  },
+  events: {
+    rows: () => S.events.map(e => ({ id:e.id, member_id:e.member, title:e.title,
+      date:e.date, end_date: nz(e.end), time: nz(e.time), place: nz(e.place) })),
+    load: rs => { S.events = rs.map(r => ({ id:r.id, member:r.member_id || 'gemeinsam',
+      title:r.title, date:r.date, ...(r.end_date?{end:r.end_date}:{}),
+      ...(r.time?{time:r.time}:{}), ...(r.place?{place:r.place}:{}) })); }
+  },
+  lists: {
+    rows: () => S.lists.map((l,i) => ({ id:l.id, name:l.name, sort:i })),
+    load: rs => { const alt = Object.fromEntries(S.lists.map(l => [l.id, l.items||[]]));
+      S.lists = rs.sort((a,b)=>(a.sort||0)-(b.sort||0)).map(r => ({ id:r.id, name:r.name, items: alt[r.id] || [] })); }
+  },
+  items: {
+    rows: () => S.lists.flatMap(l => (l.items||[]).map(i => ({ id:i.id, list_id:l.id,
+      text:i.text, done:!!i.done, by_member: nz(i.by) }))),
+    load: rs => { S.lists.forEach(l => l.items = []);
+      rs.forEach(r => { const l = S.lists.find(x => x.id === r.list_id);
+        if (l) l.items.push({ id:r.id, text:r.text, done:!!r.done, by:r.by_member || 'ka' }); }); }
+  },
+  menu: {
+    rows: () => S.menu.map(m => ({ id:m.id, day:m.day, meal:m.meal, zutaten:m.zutaten||[] })),
+    load: rs => { S.menu = rs.map(r => ({ id:r.id, day:r.day, meal:r.meal, zutaten:r.zutaten||[] })); }
+  },
+  school: {
+    rows: () => S.school.map(x => ({ id:x.id, member_id:x.member, kind:x.kind,
+      subject: nz(x.subject), title:x.title, due: nz(x.due), done:!!x.done })),
+    load: rs => { S.school = rs.map(r => ({ id:r.id, member:r.member_id, kind:r.kind,
+      subject:r.subject||'', title:r.title, due:r.due, done:!!r.done })); }
+  },
+  chores: {
+    rows: () => S.chores.map(c => ({ id:c.id, member_id:c.member, title:c.title,
+      rhythm:c.rhythm, done_dates:c.done||[] })),
+    load: rs => { S.chores = rs.map(r => ({ id:r.id, member:r.member_id, title:r.title,
+      rhythm:r.rhythm||'täglich', done:r.done_dates||[] })); }
+  },
+  reasons: {
+    rows: () => S.reasons.map(r => ({ id:r.id, text:r.text, amount:r.amount })),
+    load: rs => { S.reasons = rs.map(r => ({ id:r.id, text:r.text, amount:Number(r.amount) })); }
+  },
+  strikes: {
+    rows: () => S.strikes.map(x => ({ id:x.id, member_id:x.member, reason_id: nz(x.reasonId),
+      reason:x.reason, amount:x.amount, date:x.date })),
+    load: rs => { S.strikes = rs.map(r => ({ id:r.id, member:r.member_id, reasonId:r.reason_id,
+      reason:r.reason, amount:Number(r.amount), date:r.date })); }
+  },
+  messages: {
+    rows: () => S.chat.map(m => ({ id:m.id, member_id:m.member, text:m.text,
+      created_at: m.at || new Date().toISOString() })),
+    load: rs => { S.chat = rs.sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))
+      .map(r => { const d = new Date(r.created_at);
+        return { id:r.id, member:r.member_id, text:r.text, at:r.created_at,
+                 t: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }; }); }
+  },
+  settings: {
+    rows: () => [ { key:'allowance', value:S.allowance },
+                  { key:'perms', value:S.perms },
+                  { key:'imported', value:{ ids:S.imported||[] } } ],
+    load: rs => { rs.forEach(r => {
+      if (r.key === 'allowance') S.allowance = { ...ALLOWANCE_DEFAULT, ...(r.value||{}) };
+      if (r.key === 'perms') S.perms = { ...PERMS_DEFAULT, ...(r.value||{}) };
+      if (r.key === 'imported') S.imported = (r.value && r.value.ids) || []; }); },
+    pk: 'key'
+  }
+};
+
+/* ---- Herunterladen ---- */
+async function pull(){
+  const namen = Object.keys(TABLES);
+  const daten = await Promise.all(namen.map(n => sbRest(n + '?select=*')));
+  namen.forEach((n, i) => TABLES[n].load(daten[i] || []));
+  refreshMembers();
+  snapshot();            // Stand als abgeglichen merken
+  online = true;
+  saveLocal();
+}
+
+/* ---- Hochladen, nur was sich geändert hat ---- */
+let synced = {};
+const keyOf = (t, r) => String(r[TABLES[t].pk || 'id']);
+function snapshot(){
+  synced = {};
+  Object.keys(TABLES).forEach(t => {
+    synced[t] = Object.fromEntries(TABLES[t].rows().map(r => [keyOf(t,r), JSON.stringify(r)]));
+  });
+}
+async function push(){
+  if (!auth) return;
+  for (const t of Object.keys(TABLES)){
+    const jetzt = TABLES[t].rows();
+    const alt = synced[t] || {};
+    const neu = jetzt.filter(r => alt[keyOf(t,r)] !== JSON.stringify(r));
+    const ids = new Set(jetzt.map(r => keyOf(t,r)));
+    const weg = Object.keys(alt).filter(k => !ids.has(k));
+    const pk = TABLES[t].pk || 'id';
+    if (neu.length)
+      await sbRest(t, { method:'POST', body:neu, headers:{ 'Prefer':'resolution=merge-duplicates' } });
+    for (const k of weg)
+      await sbRest(`${t}?${pk}=eq.${encodeURIComponent(k)}`, { method:'DELETE' });
+    synced[t] = Object.fromEntries(jetzt.map(r => [keyOf(t,r), JSON.stringify(r)]));
+  }
+  online = true;
+}
+function scheduleSync(){
+  if (!auth) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    push().then(markOnline).catch(err => { online = false; markOnline(); console.warn(err); });
+  }, 600);
+}
+function markOnline(){
+  const el = document.getElementById('netdot');
+  if (el){ el.className = 'netdot ' + (online ? 'on' : 'off');
+           el.title = online ? 'Mit der Datenbank verbunden' : 'Keine Verbindung, Änderungen warten'; }
+}
+
+/* ---- Regelmässig nachschauen, ob jemand anders etwas geändert hat ---- */
+function startPolling(){
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    if (document.hidden || dragState || document.querySelector('.sheet.open')) return;
+    pull().then(() => { markOnline(); render(); })
+          .catch(() => { online = false; markOnline(); });
+  }, 20000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && auth)
+      pull().then(() => { markOnline(); render(); }).catch(() => { online = false; markOnline(); });
+  });
+}
+
+/* ---- Anmeldebildschirm ---- */
+let loginBusy = false;
+function showLogin(msg){
   const el = $('#lock');
-  const people = MEMBERS.filter(m => m.role !== 'shared');
-  el.innerHTML = lockPick ? `
-    <div class="lockbox">
-      ${av(lockPick,'xl')}
-      <h2>${esc(mem(lockPick).name)}</h2>
-      <p class="lockhint">Code eingeben</p>
-      <input id="pinInput" type="password" inputmode="numeric" maxlength="8"
-        autocomplete="off" class="pin" aria-label="Code">
-      <div class="lockact">
-        <button class="btn ghost" data-lockback>Zurück</button>
-        <button class="btn" data-lockgo>Anmelden</button>
-      </div>
-    </div>` : `
+  el.innerHTML = `
     <div class="lockbox">
       <h2>Ruchs Organisations App</h2>
-      <p class="lockhint">Wer bist du?</p>
-      <div class="lockgrid">
-        ${people.map(m => `<button class="lockperson" data-lockpick="${m.id}">
-          ${av(m.id,'xl')}<span>${esc(m.name)}</span></button>`).join('')}
-      </div>
+      <p class="lockhint">Melde dich an</p>
+      <div class="field"><label for="loginMail">E-Mail</label>
+        <input id="loginMail" type="email" autocomplete="username" inputmode="email"></div>
+      <div class="field"><label for="loginPass">Passwort</label>
+        <input id="loginPass" type="password" autocomplete="current-password"></div>
+      ${msg ? `<p class="lockerr">${esc(msg)}</p>` : ''}
+      <div class="lockact"><button class="btn" data-dologin style="flex:1">Anmelden</button></div>
     </div>`;
   el.classList.add('on');
-  if (lockPick) setTimeout(() => { const i = document.getElementById('pinInput'); if (i) i.focus(); }, 120);
+  setTimeout(() => { const i = document.getElementById('loginMail'); if (i) i.focus(); }, 120);
 }
 function hideLock(){ $('#lock').classList.remove('on'); }
 
-function tryUnlock(id, code){
-  const m = mem(id);
-  if (m.pin && m.pin !== String(code || '')){ toast('Code stimmt nicht.'); return false; }
-  setSession(id); lockPick = null; hideLock(); render(); return true;
+async function doLogin(){
+  if (loginBusy) return;
+  const mail = ($('#loginMail').value || '').trim();
+  const pass = $('#loginPass').value || '';
+  if (!mail || !pass) return showLogin('E-Mail und Passwort ausfüllen.');
+  loginBusy = true; showLogin('Einen Moment …');
+  try {
+    await login(mail, pass);
+    loginBusy = false;
+    await afterLogin();
+  } catch (err){
+    loginBusy = false;
+    showLogin(String(err.message).includes('credentials') ? 'E-Mail oder Passwort stimmt nicht.' : err.message);
+  }
+}
+
+function logout(){
+  saveAuth(null);
+  clearInterval(pollTimer);
+  showLogin();
+}
+
+/* ---- Nach der Anmeldung: abgleichen und Person zuordnen ---- */
+async function afterLogin(){
+  const lokal = { ev:S.events.length, it:S.lists.reduce((n,l)=>n+(l.items||[]).length,0) };
+  try { await pull(); }
+  catch (err){ online = false; toast('Keine Verbindung zur Datenbank.'); hideLock(); render(); return; }
+
+  // Erstes Mal: Datenbank leer, Gerät hat Daten
+  if (!S.events.length && lokal.ev > 0){
+    const sich = loadLocal();
+    if (sich && confirm(`Die Datenbank ist noch leer, auf diesem Gerät liegen ${lokal.ev} Termine.\nJetzt hochladen?`)){
+      Object.assign(S, { events:sich.events||[], lists:sich.lists||S.lists, menu:sich.menu||[],
+        school:sich.school||[], chores:sich.chores||[], strikes:sich.strikes||[],
+        chat:sich.chat||[], imported:sich.imported||[] });
+      if (sich.members && sich.members.length) S.members = sich.members;
+      refreshMembers();
+      try { await push(); toast('Alles hochgeladen.'); } catch(e){ toast('Hochladen fehlgeschlagen.'); }
+    }
+  }
+
+  // Wer bin ich? Über die E-Mail der Anmeldung
+  const mich = S.members.find(m => (m.email||'').toLowerCase() === (auth.email||'').toLowerCase());
+  if (mich) S.me = mich.id;
+  else { S.me = S.members[0].id; setTimeout(() => toast('Dieses Konto ist noch keiner Person zugeordnet – unter Profile eintragen.'), 600); }
+
+  applyImport();
+  saveLocal(); markOnline(); startPolling();
+  hideLock(); render();
 }
 
 function boot(){
   refreshMembers();
-  if (needsLogin()){ lockPick = null; showLock(); return; }
-  if (S.auth.required && session) S.me = session;
-  hideLock(); render();
+  if (!auth){ showLogin(); return; }
+  hideLock(); render();                 // zuerst der gespeicherte Stand, damit es sofort da ist
+  afterLogin();
 }
 
 /* ============ Router ============ */
@@ -1169,29 +1399,16 @@ function viewProfil(){
   const admin = may('admin');
   return `
   <section class="sec">
-    <div class="sec-head"><h2>Angemeldet</h2>
-      ${S.auth.required ? '<button class="linkbtn" data-logout>Abmelden</button>' : ''}</div>
+    <div class="sec-head"><h2>Angemeldet</h2><button class="linkbtn" data-logout>Abmelden</button></div>
     <div class="card">
       <div class="row">${av(S.me)}
         <div class="body"><div class="t">${esc(mem(S.me).name)}</div>
-          <div class="s">${mem(S.me).role==='parent'?'Elternteil':'Kind'}${mem(S.me).pin?' · Code gesetzt':''}</div></div>
-      </div>
-      ${!S.auth.required ? `<div class="chips" style="margin-top:6px">
-        ${MEMBERS.filter(m => m.role !== 'shared').map(m => `
-          <button class="chip" data-me="${m.id}" aria-pressed="${S.me===m.id}">
-            <i class="dot" style="background:${m.color}"></i>${esc(m.name)}</button>`).join('')}
-      </div>` : ''}
-      <div class="permrow" style="margin-top:8px">
-        <div class="t">Anmeldung beim Start verlangen</div>
-        <div class="seg">
-          <button data-auth="1" aria-pressed="${S.auth.required}" ${admin?'':'disabled'}>Ein</button>
-          <button data-auth="0" aria-pressed="${!S.auth.required}" ${admin?'':'disabled'}>Aus</button>
-        </div>
+          <div class="s">${auth ? esc(auth.email) : 'nicht angemeldet'}</div></div>
+        <span class="netdot ${online?'on':'off'}"></span>
       </div>
       <p class="p-legend" style="text-align:left">
-        Bei „Ein“ fragt die App beim Öffnen, wer du bist. Wer einen Code hat, muss ihn eingeben.
-        Den Code setzt du bei der Person. Er liegt im Browser des Geräts: Das hält Kinder ab,
-        ist aber kein Schutz gegen jemanden, der sich auskennt.</p>
+        ${online ? 'Verbunden. Änderungen erscheinen auf allen Geräten.'
+                 : 'Keine Verbindung. Änderungen liegen auf diesem Gerät und werden nachgereicht.'}</p>
     </div>
   </section>
 
@@ -1340,8 +1557,8 @@ function openSheet(kind, pre){
     </div>
     <div class="field"><label for="f-allow">Sackgeld pro Auszahlung in CHF, nur bei Kindern</label>
       <input id="f-allow" type="number" step="0.5" min="0" value="${m.allowance!=null?m.allowance:''}"></div>
-    <div class="field"><label for="f-pin">Code für die Anmeldung, leer lassen für keinen</label>
-      <input id="f-pin" inputmode="numeric" maxlength="8" value="${esc(m.pin||'')}" placeholder="z. B. 2468"></div>
+    <div class="field"><label for="f-mail">E-Mail der Anmeldung, verbindet den Zugang mit dieser Person</label>
+      <input id="f-mail" type="email" inputmode="email" value="${esc(m.email||'')}" placeholder="z. B. paul@ruch.ch"></div>
     <div class="actions">
       ${kind==='editmem' ? `<button class="btn ghost" data-delmem="${pre.id}">Löschen</button>` : '<button class="btn ghost" data-close>Abbrechen</button>'}
       <button class="btn" data-save="member">Sichern</button></div>`;
@@ -1422,14 +1639,9 @@ document.addEventListener('click', e => {
   if ('close' in d) return closeSheet();
   if (d.sheet) return openSheet(d.sheet);
 
-  if (d.lockpick){ lockPick = d.lockpick;
-    if (!mem(lockPick).pin) return tryUnlock(lockPick);
-    return showLock(); }
-  if ('lockback' in d){ lockPick = null; return showLock(); }
-  if ('lockgo' in d){ return tryUnlock(lockPick, $('#pinInput').value); }
+  if ('dologin' in d){ return doLogin(); }
   if ('logout' in d){ return logout(); }
-  if (d.me){ if (S.auth.required) return toast('Bei aktiver Anmeldung wechselst du über Abmelden.');
-    S.me = d.me; return render(); }
+  if (d.me){ return toast('Die Person ergibt sich aus der Anmeldung.'); }
   if (d.perm){ if (!may('admin')) return deny();
     const [k,v] = d.perm.split('|'); S.perms[k] = v; return render(); }
   if (d.editmem){ if (!may('admin')) return deny(); return openSheet('editmem', { id:d.editmem }); }
@@ -1442,10 +1654,6 @@ document.addEventListener('click', e => {
   if (d.editreason){ if (!may('admin')) return deny(); return openSheet('editreason', { id:d.editreason }); }
   if (d.delreason){ if (!may('admin')) return deny();
     S.reasons = S.reasons.filter(r => r.id !== d.delreason); closeSheet(); return render(); }
-  if (d.auth){ if (!may('admin')) return deny();
-    S.auth.required = d.auth === '1';
-    if (S.auth.required) setSession(S.me);
-    return render(); }
   if (d.interval){ if (!may('admin')) return deny(); S.allowance.interval = d.interval; return render(); }
   if (d.payday){ if (!may('admin')) return deny(); S.allowance.day = +d.payday; return render(); }
   if (d.editev){ if (!may('events.edit')) return deny(); return openSheet('editev', { id:d.editev }); }
@@ -1490,7 +1698,7 @@ document.addEventListener('click', e => {
   if (d.strike){ if (!may('strikes.set')) return deny();
     const [mid, rid] = d.strike.split('|');
     const r = S.reasons.find(x => x.id === rid); if (!r) return;
-    S.strikes.push({ id:uid(), member:mid, reason:r.text, date:TODAY_ISO, amount:r.amount });
+    S.strikes.push({ id:uid(), member:mid, reasonId:r.id, reason:r.text, date:TODAY_ISO, amount:r.amount });
     return render(); }
   if (d.unstrike){ if (!may('strikes.set')) return deny();
     S.strikes = S.strikes.filter(s=>s.id!==d.unstrike); return render(); }
@@ -1525,11 +1733,12 @@ document.addEventListener('click', e => {
       Object.assign(m, data); if (role !== 'kid') delete m.allowance;
       if (pendingPhoto === null) delete m.photo;
       else if (pendingPhoto) m.photo = pendingPhoto;
-      const pin = $('#f-pin').value.trim(); if (pin) m.pin = pin; else delete m.pin;
+      const mail = $('#f-mail').value.trim(); if (mail) m.email = mail; else delete m.email;
+      delete m.pin;
     } else {
-      const pin = $('#f-pin').value.trim();
+      const mail = $('#f-mail').value.trim();
       S.members.push({ id:'m'+uid(), ...data,
-        ...(pendingPhoto ? { photo:pendingPhoto } : {}), ...(pin ? { pin } : {}) });
+        ...(pendingPhoto ? { photo:pendingPhoto } : {}), ...(mail ? { email:mail } : {}) });
     }
     refreshMembers(); closeSheet(); return render();
   }
@@ -1549,7 +1758,7 @@ document.addEventListener('click', e => {
   }
   if (d.save === 'menu'){
     const meal = $('#f-meal').value.trim(); if (!meal) return $('#f-meal').focus();
-    S.menu.push({ day:$('#f-day').value, meal,
+    S.menu.push({ id:'n'+uid(), day:$('#f-day').value, meal,
       zutaten:$('#f-zut').value.split(',').map(z => z.trim()).filter(Boolean) });
     closeSheet(); return render();
   }
@@ -1565,7 +1774,7 @@ $('#scrim').addEventListener('click', closeSheet);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 document.addEventListener('keypress', e => {
   if (e.key !== 'Enter') return;
-  if (e.target.id === 'pinInput') tryUnlock(lockPick, e.target.value);
+  if (e.target.id === 'loginPass' || e.target.id === 'loginMail') doLogin();
   if (e.target.id === 'shopInput') addItem();
   if (e.target.id === 'chatInput') sendMsg();
 });
