@@ -178,6 +178,16 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
   min-width:0;overflow:hidden;
   font-size:11.5px;font-weight:600;font-family:"Bricolage Grotesque",sans-serif}
 .p-hcell{letter-spacing:.02em;color:var(--muted)}
+.p-head{flex-direction:column;justify-content:stretch;gap:0;padding:0;align-items:stretch}
+.p-head .hb{display:flex;height:14px}
+.p-head .hb span{flex:1;text-align:center;font-size:9px;line-height:14px;
+  border-left:1px solid var(--line);color:var(--muted)}
+.p-head .hb span:first-child{border-left:none}
+.p-head .hs{display:flex;height:20px;border-top:1px solid var(--line-soft)}
+.p-head .hs span{flex:1;text-align:center;font-size:8.5px;line-height:19px;
+  border-left:1px solid var(--line-soft);color:var(--muted);font-variant-numeric:tabular-nums}
+.p-head .hs span.bandstart{border-left-color:var(--line)}
+.p-head .hs span:first-child{border-left:none}
 .p-corner{left:0;z-index:6;font-size:9px;color:var(--muted)}
 .p-hcell{border-left:1px solid var(--line-soft)}
 .p-rowline{grid-column:1/-1;z-index:0;border-bottom:1px solid var(--line-soft)}
@@ -1361,9 +1371,11 @@ function planerHTML(){
 
   /* 4. Aufbauen */
   let html = `<div class="p-corner" style="grid-area:1/1">KW</div>`;
-  BANDS.forEach((bd, i) => {
-    html += `<div class="p-hcell" style="grid-row:1;grid-column:${i+2}">${bd.l}</div>`;
-  });
+  html += `<div class="p-hcell p-head" style="grid-row:1;grid-column:2/-1">
+    <div class="hb">${BANDS.map(bd => `<span>${bd.l}</span>`).join('')}</div>
+    <div class="hs">${Array.from({length:SLOTN}, (_,i) =>
+      `<span class="${i % 6 === 0 ? 'bandstart' : ''}">${SLOT0 + i}</span>`).join('')}</div>
+  </div>`;
 
   for (let d = 1; d <= nDays; d++){
     const dt = new Date(y, mo, d), k = iso(dt), wd = dt.getDay();
@@ -1410,7 +1422,7 @@ function planerHTML(){
   return `<div class="p-wrap"><div class="p-scroll"><div class="pgrid" data-days="${nDays}"
     data-y="${y}" data-mo="${mo}"
     style="grid-template-columns:var(--daycol) repeat(3,1fr);
-           grid-template-rows:30px ${rowsCss}">${html}</div></div></div>`;
+           grid-template-rows:34px ${rowsCss}">${html}</div></div></div>`;
 }
 
 function viewCal(){
