@@ -652,6 +652,7 @@ const deny = () => toast('Dafür fehlt dir die Berechtigung.');
 const SB_URL = 'https://qqlltyzrnwcsgmvcydwe.supabase.co';
 const SB_KEY = 'sb_publishable_haSjCOJE0YSqwJZZwqr8Uw_p1q_J--D';
 const TKEY = KEY + '-token';
+const BKEY = KEY + '-backup';   // Gerätestand vor dem ersten Abgleich
 
 let auth = null;            // { access_token, refresh_token, expires_at, email }
 let online = false;         // letzte Übertragung erfolgreich
@@ -937,31 +938,52 @@ function logout(){
 
 /* ---- Nach der Anmeldung: abgleichen und Person zuordnen ---- */
 async function afterLogin(){
-  const lokal = { ev:S.events.length, it:S.lists.reduce((n,l)=>n+(l.items||[]).length,0) };
+  /* Stand dieses Geräts festhalten, BEVOR irgendetwas überschrieben wird */
+  const vorher = JSON.parse(JSON.stringify(S));
+  if ((vorher.events || []).length){
+    try {
+      const alt = JSON.parse(localStorage.getItem(BKEY) || 'null');
+      if (!alt || (alt.events || []).length <= vorher.events.length)
+        localStorage.setItem(BKEY, JSON.stringify(vorher));
+    } catch(e){}
+  }
+
   try { await pull(); }
   catch (err){ online = false; toast('Keine Verbindung zur Datenbank.'); hideLock(); render(); return; }
 
-  // Erstes Mal: Datenbank leer, Gerät hat Daten
-  if (!S.events.length && lokal.ev > 0){
-    const sich = loadLocal();
-    if (sich && confirm(`Die Datenbank ist noch leer, auf diesem Gerät liegen ${lokal.ev} Termine.\nJetzt hochladen?`)){
-      Object.assign(S, { events:sich.events||[], lists:sich.lists||S.lists, menu:sich.menu||[],
-        school:sich.school||[], chores:sich.chores||[], strikes:sich.strikes||[],
-        chat:sich.chat||[], imported:sich.imported||[] });
-      if (sich.members && sich.members.length) S.members = sich.members;
-      refreshMembers();
-      try { await push(); toast('Alles hochgeladen.'); } catch(e){ toast('Hochladen fehlgeschlagen.'); }
-    }
+  /* Datenbank noch leer, Gerät hat Daten: anbieten hochzuladen */
+  if (!S.events.length && (vorher.events || []).length){
+    if (confirm(`Die Datenbank ist noch leer, auf diesem Gerät liegen ${vorher.events.length} Termine.\n\nJetzt hochladen?`))
+      await uploadLocal(vorher);
   }
 
-  // Wer bin ich? Über die E-Mail der Anmeldung
   const mich = S.members.find(m => (m.email||'').toLowerCase() === (auth.email||'').toLowerCase());
   if (mich) S.me = mich.id;
-  else { S.me = S.members[0].id; setTimeout(() => toast('Dieses Konto ist noch keiner Person zugeordnet – unter Profile eintragen.'), 600); }
+  else { S.me = S.members[0].id;
+         setTimeout(() => toast('Dieses Konto ist keiner Person zugeordnet – unter Profile eintragen.'), 600); }
 
   applyImport();
   saveLocal(); markOnline(); startPolling();
   hideLock(); render();
+}
+
+/* Gerätestand in die Datenbank schreiben */
+async function uploadLocal(quelle){
+  const q = quelle || (() => { try { return JSON.parse(localStorage.getItem(BKEY) || 'null'); } catch(e){ return null; } })();
+  if (!q || !(q.events || []).length){ toast('Auf diesem Gerät liegt kein Stand zum Hochladen.'); return false; }
+  Object.assign(S, {
+    events: q.events || [], menu: q.menu || [], school: q.school || [],
+    chores: q.chores || [], strikes: q.strikes || [], chat: q.chat || [],
+    imported: q.imported || []
+  });
+  if (q.lists && q.lists.length) S.lists = q.lists;
+  if (q.members && q.members.length) S.members = q.members;
+  if (q.allowance) S.allowance = q.allowance;
+  if (q.perms) S.perms = q.perms;
+  refreshMembers();
+  synced = {};        // alles als noch nicht übertragen behandeln
+  try { await push(); saveLocal(); toast(`${S.events.length} Termine hochgeladen.`); return true; }
+  catch (err){ toast('Hochladen fehlgeschlagen: ' + err.message); return false; }
 }
 
 function boot(){
@@ -1523,6 +1545,20 @@ function viewProfil(){
     </div>
   </section>
 
+  <section class="sec">
+    <div class="sec-head"><h2>Daten</h2><span class="hint">nur im Notfall</span></div>
+    <div class="card">
+      <div class="row"><div class="body">
+        <div class="t">Gerätestand hochladen</div>
+        <div class="s">Nimmt die vor der Umstellung gesicherten Einträge dieses Geräts und schreibt sie in die Datenbank.</div></div>
+        <button class="linkbtn" data-uploadlocal>laden</button></div>
+      <div class="row"><div class="body">
+        <div class="t">Papiertermine erneut einlesen</div>
+        <div class="s">Trägt die 33 Termine aus eurem Wandkalender nochmals ein, sofern sie fehlen.</div></div>
+        <button class="linkbtn" data-reimport>einlesen</button></div>
+    </div>
+  </section>
+
   <p class="footnote">Ruchs Organisations App · <button data-reset>Alles zurücksetzen</button></p>`;
 }
 
@@ -1687,6 +1723,12 @@ document.addEventListener('click', e => {
   if ('loginmanual' in d){ loginPick = null; loginManual = true; return showLogin(); }
   if ('dologin' in d){ return doLogin(); }
   if ('logout' in d){ return logout(); }
+  if ('uploadlocal' in d){ if (!may('admin')) return deny();
+    uploadLocal().then(ok => { if (ok) render(); }); return; }
+  if ('reimport' in d){ if (!may('admin')) return deny();
+    const vorher = S.events.length;
+    S.imported = []; applyImport();
+    toast(`${S.events.length - vorher} Termine ergänzt.`); return render(); }
   if (d.me){ return toast('Die Person ergibt sich aus der Anmeldung.'); }
   if (d.perm){ if (!may('admin')) return deny();
     const [k,v] = d.perm.split('|'); S.perms[k] = v; return render(); }
