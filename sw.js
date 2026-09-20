@@ -1,9 +1,9 @@
-/* Familienhub – Service Worker
+/* Ruchs Organisations App – Service Worker
    Strategie: Netzwerk zuerst, Zwischenspeicher als Rückfallebene.
    So bekommst du immer die neuste Fassung, und ohne Empfang funktioniert
    die App trotzdem. */
 
-const CACHE = 'familienhub-v1';
+const CACHE = 'ruchs-app-v2';
 const FILES = [
   './',
   './index.html',

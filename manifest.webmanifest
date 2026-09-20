@@ -1,7 +1,7 @@
 {
-  "name": "Familienhub",
-  "short_name": "Familienhub",
-  "description": "Familienkalender, Einkauf, Schule und Ämtli",
+  "name": "Ruchs Organisations App",
+  "short_name": "Ruchs App",
+  "description": "Kalender, Einkauf, Schule und Ämtli der Familie Ruch",
   "lang": "de-CH",
   "start_url": "./",
   "scope": "./",
