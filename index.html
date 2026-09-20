@@ -202,6 +202,13 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
   white-space:normal;overflow-wrap:anywhere;word-break:break-word;hyphens:auto;
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .p-ev b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;margin-right:3px;font-size:10px}
+.p-ev .rz{position:absolute;top:0;bottom:0;width:9px;cursor:ew-resize;z-index:3;
+  display:flex;align-items:center;justify-content:center}
+.p-ev .rz::after{content:'';width:2px;height:55%;border-radius:1px;background:var(--pc);opacity:.55}
+.p-ev .rz-l{left:0}
+.p-ev .rz-r{right:0}
+.p-ev.dehnbar{padding-right:10px}
+.p-ev.dehnt{box-shadow:0 0 0 2px var(--pc);z-index:5}
 .p-ev .pk{display:inline-block;color:#fff;font-size:8.5px;font-weight:600;font-style:normal;
   font-family:"Bricolage Grotesque",sans-serif;border-radius:3px;padding:0 3px;margin-right:4px;
   vertical-align:1px;letter-spacing:.02em}
@@ -1294,6 +1301,18 @@ const BANDS = [
   { l:'Abend',  std:'18:00', std_h:[17,18,19,20,21,22] }
 ];
 const hh = h => String(h).padStart(2,'0') + ':00';
+const SLOT0 = 5, SLOTN = 18;                       // 5 bis 22 Uhr, 18 Stunden
+const slotOf = h => Math.min(SLOTN-1, Math.max(0, h - SLOT0));
+const minOf = z => +z.slice(0,2)*60 + +z.slice(3,5);
+/* Erster und letzter Stundenschritt eines Termins */
+function slotSpan(e){
+  if (!e.time) return [0, SLOTN-1];                       // ohne Uhrzeit: ganztags
+  if (e.end && e.end > e.date) return [0, SLOTN-1];       // mehrtägig: ganztags
+  const i1 = slotOf(+e.time.slice(0,2));
+  if (!e.timeEnd || minOf(e.timeEnd) <= minOf(e.time)) return [i1, i1];
+  const letzte = Math.ceil(minOf(e.timeEnd) / 60) - 1;
+  return [i1, Math.max(i1, slotOf(letzte))];
+}
 /* Ohne Uhrzeit: über alle drei Bereiche */
 const bandOf = t => !t ? -1 : (t < '11:00' ? 0 : t < '17:00' ? 1 : 2);
 
@@ -1309,11 +1328,11 @@ function planerHTML(){
     .filter(e => e.date <= last && evEnd(e) >= first)
     .filter(e => filt === 'alle' || e.member === filt)
     .map(e => {
-      const bd = bandOf(e.time);
+      const [s1, s2] = slotSpan(e);
       return { ...e,
         a: e.date < first ? 1 : new Date(e.date+'T00:00').getDate(),
         b: evEnd(e) > last ? nDays : new Date(evEnd(e)+'T00:00').getDate(),
-        c1: bd < 0 ? 0 : bd, c2: bd < 0 ? 2 : bd };
+        c1: s1, c2: s2 };
     })
     .sort((x, z) => x.a - z.a
       || x.c1 - z.c1
@@ -1370,12 +1389,20 @@ function planerHTML(){
     const m = mem(e.member);
     const top = off[e.a] + e.zeile * RH;
     const hgt = off[e.b] - off[e.a] + RH;
-    const li = (e.c1 / 3 * 100).toFixed(4), br = ((e.c2 - e.c1 + 1) / 3 * 100).toFixed(4);
-    return `<div class="p-ev" data-ev="${e.id}" data-c1="${e.c1}" data-c2="${e.c2}"
+    const n = e.c2 - e.c1 + 1;
+    const li = (e.c1 / SLOTN * 100).toFixed(4), br = (n / SLOTN * 100).toFixed(4);
+    const ganz = (n === SLOTN);
+    const dehnbar = !!e.time && !(e.end && e.end > e.date);
+    /* Je schmaler die Kachel, desto weniger Text passt hinein */
+    const inhalt = `<i class="pk" style="background:${m.color}">${esc(ini(m))}</i>`
+      + ((ganz || n >= 2) && e.time ? `<b>${e.time}</b>` : '')
+      + (ganz || n >= 3 ? esc(e.title) : '');
+    return `<div class="p-ev${dehnbar?' dehnbar':''}" data-ev="${e.id}" data-c1="${e.c1}" data-c2="${e.c2}"
       style="--pc:${m.color};background:${tint(m.color, .15)};
       top:${top + 2}px;height:${hgt - 4}px;
-      left:calc(${li}% + 2px);width:calc(${br}% - 4px)"
-      title="${esc(m.name)}: ${esc(e.title)}"><i class="pk" style="background:${m.color}">${esc(ini(m))}</i>${e.time ? `<b>${e.time}</b>` : ''}${esc(e.title)}</div>`;
+      left:calc(${li}% + 1px);width:calc(${br}% - 2px)"
+      title="${esc(m.name)}: ${esc(e.title)}${e.time ? ' · '+e.time+(e.timeEnd?'–'+e.timeEnd:'') : ''}">${inhalt}${
+        dehnbar ? `${n > 1 ? '<i class="rz rz-l" data-rz="l"></i>' : ''}<i class="rz rz-r" data-rz="r"></i>` : ''}</div>`;
   }).join('');
   html += `<div class="p-layer" style="grid-row:2/-1;grid-column:2/-1">${kacheln}</div>`;
 
@@ -1410,7 +1437,8 @@ function viewCal(){
   ${planerHTML()}
   <p class="p-legend">Auf eine freie Stelle tippen legt einen Termin an, die Zeit rastet auf die Stunde ein.
     Auf einen Termin tippen öffnet ihn, dort änderst du die Person.
-    Lang drücken und ziehen verschiebt ihn auf einen anderen Tag und eine andere Stunde.</p>
+    Lang drücken und ziehen verschiebt ihn auf einen anderen Tag und eine andere Stunde.
+    An den Enden ziehen macht ihn länger oder kürzer, im Stundenraster.</p>
 
   <section class="sec">
     <div class="sec-head"><h2>${relDay(S.ui.calSel)}</h2>
@@ -1444,22 +1472,20 @@ function initPlaner(){
   };
   /* Stündliches Einrasten: sechs Schritte je Bereich */
   const timeAt = x => {
-    const bd = bandAt(x); if (bd === null) return null;
-    const r = layer().getBoundingClientRect();
-    const bw = r.width / 3;
-    const inBand = (x - r.left) - bd * bw;
-    const stunden = BANDS[bd].std_h;
-    const i = Math.min(stunden.length - 1, Math.max(0, Math.floor(inBand / (bw / stunden.length))));
-    return hh(stunden[i]);
+    const el = layer(); if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (x < r.left || x > r.right) return null;
+    return hh(SLOT0 + Math.min(SLOTN-1, Math.max(0, Math.floor((x - r.left) / (r.width / SLOTN)))));
   };
   /* Linker Rand und Breite eines Stundenschritts, für die Zielanzeige */
-  const slotGeo = zeit => {
-    const h = +zeit.slice(0,2);
-    let bd = BANDS.findIndex(b => b.std_h.includes(h));
-    if (bd < 0) bd = bandOf(zeit) < 0 ? 0 : bandOf(zeit);
-    const i = Math.max(0, BANDS[bd].std_h.indexOf(h));
-    const n = BANDS[bd].std_h.length;
-    return { left: (bd/3 + i/(3*n)) * 100, width: 100/(3*n) };
+  const slotGeo = zeit => ({ left: slotOf(+zeit.slice(0,2)) / SLOTN * 100, width: 100 / SLOTN });
+  /* Stundenschritt unter dem Finger */
+  const slotAt = x => {
+    const el = layer(); if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (x < r.left) return 0;
+    if (x > r.right) return SLOTN - 1;
+    return Math.min(SLOTN-1, Math.max(0, Math.floor((x - r.left) / (r.width / SLOTN))));
   };
   const dayAt = y => {
     const el = layer(); if (!el) return 1;
@@ -1473,8 +1499,19 @@ function initPlaner(){
   grid.addEventListener('pointerdown', e => {
     const lay = e.target.closest('.p-layer'); if (!lay) return;
     const evEl = e.target.closest('.p-ev');
+    const griff = e.target.closest('.rz');
     dragState = { x:e.clientX, y:e.clientY, evEl, id:evEl && evEl.dataset.ev,
                   moved:false, drag:false, pid:e.pointerId };
+    if (griff && evEl && may('events.edit')){
+      /* Griffe brauchen kein langes Drücken */
+      dragState.rz = griff.dataset.rz;
+      dragState.drag = true;
+      dragState.basis = { c1:+evEl.dataset.c1, c2:+evEl.dataset.c2 };
+      document.body.classList.add('dragging');
+      evEl.classList.add('dehnt');
+      try { grid.setPointerCapture(e.pointerId); } catch(err){}
+      return;
+    }
     if (evEl && may('events.edit'))
       dragState.timer = setTimeout(() => beginDrag(e.clientX, e.clientY), 330);
   });
@@ -1518,6 +1555,16 @@ function initPlaner(){
       return;
     }
     e.preventDefault();
+    if (st.rz){
+      const i = slotAt(e.clientX); if (i === null) return;
+      let c1 = st.basis.c1, c2 = st.basis.c2;
+      if (st.rz === 'l') c1 = Math.min(i, c2); else c2 = Math.max(i, c1);
+      st.neu = { c1, c2 };
+      st.evEl.style.left  = `calc(${(c1/SLOTN*100).toFixed(4)}% + 1px)`;
+      st.evEl.style.width = `calc(${((c2-c1+1)/SLOTN*100).toFixed(4)}% - 2px)`;
+      st.evEl.setAttribute('title', hh(SLOT0+c1) + '–' + hh(SLOT0+c2+1));
+      return;
+    }
     st.px = e.clientX; st.py = e.clientY;
     st.ghost.style.left = (e.clientX - st.offX) + 'px';
     st.ghost.style.top  = (e.clientY - st.offY) + 'px';
@@ -1550,6 +1597,19 @@ function initPlaner(){
     const st = dragState; if (!st) return;
     clearTimeout(st.timer);
     grid.querySelectorAll('.p-drop').forEach(n => n.remove());
+    if (st.rz){
+      document.body.classList.remove('dragging');
+      if (st.evEl) st.evEl.classList.remove('dehnt');
+      if (st.neu && st.id){
+        const t = S.events.find(x => x.id === st.id);
+        if (t){
+          t.time = hh(SLOT0 + st.neu.c1);
+          t.timeEnd = hh(SLOT0 + st.neu.c2 + 1);        // höchstens 23:00
+          toast(`„${t.title}“ ${t.time}–${t.timeEnd}`);
+        }
+      }
+      dragState = null; return render();
+    }
     if (st.drag){
       if (autoTimer){ cancelAnimationFrame(autoTimer); autoTimer = null; }
       document.body.classList.remove('dragging');
