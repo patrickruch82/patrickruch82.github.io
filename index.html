@@ -156,19 +156,6 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .check svg{width:13px;height:13px;color:#fff;opacity:0}
 .check[aria-pressed="true"] svg{opacity:1}
 
-/* Kalender */
-.cal{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:10px 8px 8px}
-.cal-head{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 10px}
-.cal-head .mon{font-family:"Bricolage Grotesque",sans-serif;font-size:16px;font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
-.wd{text-align:center;font-size:11px;color:var(--muted);padding-bottom:4px;font-weight:500}
-.day{aspect-ratio:1/1.08;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:5px;gap:3px;font-size:13px;position:relative}
-.day.out{color:var(--line)}
-.day.today{background:var(--surface-2);font-weight:600}
-.day[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
-.day .pips{display:flex;gap:2px;position:absolute;bottom:6px}
-.day .pip{width:4px;height:4px;border-radius:50%}
-.day[aria-pressed="true"] .pip{box-shadow:0 0 0 1px var(--paper)}
 
 /* Planer: Tage als Zeilen, Personen als Spalten */
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;background:var(--surface)}
@@ -203,6 +190,27 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
   overflow:hidden;border-left:2.5px solid var(--pc);color:var(--ink)}
 .p-ev b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;margin-right:3px}
 .p-legend{font-size:11.5px;color:var(--muted);margin-top:8px;text-align:center}
+
+.p-ev{cursor:grab;user-select:none;-webkit-user-select:none}
+.p-ev.ghosted{opacity:.25}
+.drag-ghost{position:fixed;z-index:200;pointer-events:none;opacity:.95;
+  box-shadow:0 10px 26px rgba(20,26,22,.3);transform:scale(1.03);cursor:grabbing}
+.p-drop{position:absolute;left:2px;right:2px;border:2px dashed var(--ink);
+  border-radius:5px;pointer-events:none;opacity:.5}
+.p-col{touch-action:pan-x pan-y}
+body.dragging{user-select:none;-webkit-user-select:none}
+body.dragging .p-scroll{overflow:hidden;touch-action:none}
+.toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom,0px));
+  transform:translate(-50%,14px);background:var(--ink);color:var(--paper);
+  padding:9px 16px;border-radius:999px;font-size:13.5px;z-index:300;opacity:0;
+  transition:opacity .18s ease,transform .18s ease;pointer-events:none;max-width:84%;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.permrow{padding:11px 0;border-bottom:1px solid var(--line-soft)}
+.permrow:last-child{border-bottom:none}
+.permrow .t{font-size:14px;margin-bottom:7px}
+.permrow .seg{width:100%}
+.permrow .seg button{flex:1;padding:5px 4px;font-size:12px}
+.seg button:disabled{opacity:.45}
 
 /* Einkauf */
 .addbar{display:flex;gap:8px;align-items:center;padding:10px 0 2px}
@@ -271,7 +279,10 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
       <div class="date" id="topDate"></div>
       <h1 id="topTitle">Startseite</h1>
     </div>
-    <button class="iconbtn" id="themeBtn" title="Hell / Dunkel" aria-label="Hell oder Dunkel umschalten"></button>
+    <div style="display:flex;align-items:center;gap:2px">
+      <button class="iconbtn" id="meBtn" title="Profile und Rechte" aria-label="Profile und Rechte"></button>
+      <button class="iconbtn" id="themeBtn" title="Hell / Dunkel" aria-label="Hell oder Dunkel umschalten"></button>
+    </div>
   </header>
   <main id="view"></main>
   <nav class="tabbar"><div class="tabbar-inner" id="tabs"></div></nav>
@@ -297,22 +308,66 @@ const I = {
   right:'<path d="m9 5 7 7-7 7"/>',
   sun:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2 12h2M20 12h2M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5"/>',
   moon:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
-  pin:'<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>'
+  pin:'<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  user:'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>'
 };
 const icon = (n, s = 20) =>
   `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
 
 /* ============ Stammdaten ============ */
-const MEMBERS = [
-  { id:'ka',     name:'Ka',     ini:'Ka', color:'#6B3FA0', kid:false },
-  { id:'paedu',  name:'Pädu',   ini:'Pä', color:'#1E3A6E', kid:false },
-  { id:'anna',   name:'Anna',   ini:'An', color:'#D9558B', kid:true, age:13 },
-  { id:'moritz', name:'Moritz', ini:'Mo', color:'#5C6670', kid:true, age:10 },
-  { id:'paul',   name:'Paul',   ini:'Pa', color:'#1F8A5B', kid:true, age:6 },
-  { id:'gemeinsam', name:'Gemeinsam', ini:'Ge', color:'#A5701F', kid:false, shared:true }
+const MEMBERS_DEFAULT = [
+  { id:'ka',        name:'Ka',        color:'#6B3FA0', role:'parent' },
+  { id:'paedu',     name:'Pädu',      color:'#1E3A6E', role:'parent' },
+  { id:'anna',      name:'Anna',      color:'#D9558B', role:'kid', allowance:13 },
+  { id:'moritz',    name:'Moritz',    color:'#5C6670', role:'kid', allowance:10 },
+  { id:'paul',      name:'Paul',      color:'#1F8A5B', role:'kid', allowance:6 },
+  { id:'gemeinsam', name:'Gemeinsam', color:'#A5701F', role:'shared' }
 ];
-const M = Object.fromEntries(MEMBERS.map(m => [m.id, m]));
-const KIDS = MEMBERS.filter(m => m.kid);
+const REASONS_DEFAULT = [
+  { id:'r1', text:'Znüni vergessen',        amount:.5 },
+  { id:'r2', text:'Turnsack vergessen',     amount:.5 },
+  { id:'r3', text:'Ämtli nicht gemacht',    amount:1 },
+  { id:'r4', text:'Handy am Tisch',         amount:.5 },
+  { id:'r5', text:'Zimmer nicht aufgeräumt', amount:.5 }
+];
+const PERMS_DEFAULT = {
+  'events.edit':  'eltern',
+  'shop.edit':    'alle',
+  'school.check': 'eigene',
+  'school.edit':  'eltern',
+  'chores.check': 'eigene',
+  'chores.edit':  'eltern',
+  'strikes.set':  'eltern',
+  'chat.write':   'alle',
+  'admin':        'eltern'
+};
+const PERM_LABELS = {
+  'events.edit':  'Termine erfassen, verschieben, löschen',
+  'shop.edit':    'Einkaufslisten ändern',
+  'school.check': 'Hausaufgaben abhaken',
+  'school.edit':  'Hausaufgaben und Prüfungen erfassen',
+  'chores.check': 'Ämtli abhaken',
+  'chores.edit':  'Ämtli anlegen und löschen',
+  'strikes.set':  'Striche setzen und entfernen',
+  'chat.write':   'Im Chat schreiben',
+  'admin':        'Profile, Rechte und Gründe verwalten'
+};
+const PERM_LEVELS = [
+  { v:'eltern', l:'Nur Eltern' },
+  { v:'eigene', l:'Eigene' },
+  { v:'alle',   l:'Alle' }
+];
+
+let MEMBERS = [], KIDS = [];
+let M = {};
+function refreshMembers(){
+  MEMBERS = S.members;
+  M = Object.fromEntries(MEMBERS.map(m => [m.id, m]));
+  KIDS = MEMBERS.filter(m => m.role === 'kid');
+}
+const mem = id => mem(id) || { id, name:'Unbekannt', color:'#8A8A8A', role:'other' };
+const ini = m => (m.name || '?').slice(0, 2);
+
 
 const TODAY = new Date(2026, 8, 20);           // So, 20.09.2026
 const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -344,72 +399,13 @@ function seed(){ return {
   chat: [],
   imported: [],
   cleaned: true,
-  ui: { calView:'planer', list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(),
+  members: MEMBERS_DEFAULT.map(m => ({ ...m })),
+  reasons: REASONS_DEFAULT.map(r => ({ ...r })),
+  perms: { ...PERMS_DEFAULT },
+  me: 'ka',
+  ui: { list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(),
         calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
 };}
-
-const REASONS = [
-  { r:'Znüni vergessen', a:.5 }, { r:'Turnsack vergessen', a:.5 },
-  { r:'Ämtli nicht gemacht', a:1 }, { r:'Handy am Tisch', a:.5 },
-  { r:'Zimmer nicht aufgeräumt', a:.5 }
-];
-const SACKGELD = { anna:13, moritz:10, paul:6 };   // CHF pro Woche, Auszahlung sonntags
-
-
-/* ============ Termine aus dem Papierkalender ============ */
-/* Alles, was auf den Fotos eindeutig lesbar war. Unter "Gemeinsam",
-   weil auf dem Papier keine Spaltenzuordnung erkennbar ist.
-   Feste Kennungen, damit nichts doppelt eingelesen wird und
-   Gelöschtes gelöscht bleibt. */
-const G = 'gemeinsam';
-const IMPORT = [
-  // September 2026
-  { id:'p-2609-01a', member:G, title:'Elternabend',        date:'2026-09-01', time:'19:00' },
-  { id:'p-2609-03a', member:G, title:'Elternabend',        date:'2026-09-03', time:'19:00' },
-  { id:'p-2609-10a', member:G, title:'Frauenarzt',         date:'2026-09-10', time:'08:45' },
-  { id:'p-2609-12a', member:G, title:'Match',              date:'2026-09-12', time:'09:00' },
-  { id:'p-2609-14a', member:G, title:'Anna hüten',         date:'2026-09-14' },
-  { id:'p-2609-16a', member:G, title:'Europapark',         date:'2026-09-16', end:'2026-09-17' },
-  { id:'p-2609-19a', member:G, title:'Heso',               date:'2026-09-19' },
-  { id:'p-2609-23a', member:G, title:'Hyrox Pädu',         date:'2026-09-23' },
-  { id:'p-2609-24a', member:G, title:'Paul Foto',          date:'2026-09-24' },
-  { id:'p-2609-25a', member:G, title:'Bellach Heso',       date:'2026-09-25' },
-  // Oktober 2026
-  { id:'p-2610-01a', member:G, title:'Hyrox Karlsruhe',    date:'2026-10-01', end:'2026-10-02' },
-  { id:'p-2610-03a', member:G, title:'Stowe',              date:'2026-10-03', end:'2026-10-04' },
-  { id:'p-2610-03b', member:G, title:'Adelboden',          date:'2026-10-03', end:'2026-10-04' },
-  { id:'p-2610-06a', member:G, title:'Anna Lager',         date:'2026-10-06', end:'2026-10-10' },
-  { id:'p-2610-10a', member:G, title:'Bärenlauf',          date:'2026-10-10' },
-  { id:'p-2610-11a', member:G, title:'Hyrox Genf',         date:'2026-10-11' },
-  { id:'p-2610-17a', member:G, title:'Match',              date:'2026-10-17', time:'13:35' },
-  { id:'p-2610-24a', member:G, title:'SM Aarau',           date:'2026-10-24' },
-  { id:'p-2610-26a', member:G, title:'Impfen Anna',        date:'2026-10-26', time:'14:50' },
-  { id:'p-2610-31a', member:G, title:'Cobretti-GV',        date:'2026-10-31' },
-  // November 2026
-  { id:'p-2611-07a', member:G, title:'Coiffeur',           date:'2026-11-07', time:'08:15' },
-  { id:'p-2611-07b', member:G, title:"L'Thaler Stadtlauf", date:'2026-11-07' },
-  { id:'p-2611-20a', member:G, title:'Musical',            date:'2026-11-20' },
-  { id:'p-2611-22a', member:G, title:'Paul Geburtstag',    date:'2026-11-22' },
-  // Dezember 2026
-  { id:'p-2612-05a', member:G, title:'Hyrox Mailand',      date:'2026-12-05', end:'2026-12-06' },
-  { id:'p-2612-05b', member:G, title:'Match',              date:'2026-12-05', time:'14:30' },
-  { id:'p-2612-12a', member:G, title:'Charity-Event',      date:'2026-12-12' },
-  // 2027, aus der Jahresübersicht
-  { id:'p-2701-09a', member:G, title:'Match',              date:'2027-01-09' },
-  { id:'p-2701-30a', member:G, title:'Match',              date:'2027-01-30' },
-  { id:'p-2702-26a', member:G, title:'Skiweekend Ka',      date:'2027-02-26', end:'2027-02-28' },
-  { id:'p-2703-12a', member:G, title:'Skiweekend Pädu',    date:'2027-03-12', end:'2027-03-14' },
-  { id:'p-2703-13a', member:G, title:'Match',              date:'2027-03-13' },
-  { id:'p-2703-15a', member:G, title:'Skilager',           date:'2027-03-15', end:'2027-03-19' }
-];
-
-/* Fügt fehlende Papiertermine hinzu. Was du löschst, bleibt gelöscht. */
-function applyImport(){
-  if (!Array.isArray(S.imported)) S.imported = [];
-  IMPORT.forEach(e => {
-    if (!S.imported.includes(e.id)){ S.events.push({ ...e }); S.imported.push(e.id); }
-  });
-}
 
 /* ============ Zustand ============ */
 const KEY = 'familienhub-v2';
@@ -417,7 +413,11 @@ let S;
 try { const raw = localStorage.getItem(KEY); S = raw ? JSON.parse(raw) : seed(); }
 catch(e){ S = seed(); }
 if (!S || !S.events) S = seed();
-if (!S.ui.calView) S.ui.calView = 'planer';
+if (!Array.isArray(S.members) || !S.members.length) S.members = MEMBERS_DEFAULT.map(m => ({ ...m }));
+if (!Array.isArray(S.reasons) || !S.reasons.length) S.reasons = REASONS_DEFAULT.map(r => ({ ...r }));
+S.perms = { ...PERMS_DEFAULT, ...(S.perms || {}) };
+if (!S.me || !S.members.some(m => m.id === S.me)) S.me = S.members[0].id;
+refreshMembers();
 
 /* Einmalig: die ursprünglichen Beispieldaten entfernen.
    Die aus dem Papierkalender übernommenen Termine (Kennung p-…) bleiben. */
@@ -437,7 +437,7 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){
 /* ============ Helfer ============ */
 const ev = (a,b) => (a.time||'').localeCompare(b.time||'');
 const eventsOn = d => S.events.filter(e => e.date === d).sort(ev);
-const av = (id, cls='') => { const m = M[id]; return `<span class="avatar ${cls}" style="background:${m.color}">${m.ini}</span>`; };
+const av = (id, cls='') => { const m = mem(id); return `<span class="avatar ${cls}" style="background:${m.color}">${ini(m)}</span>`; };
 function thisWeek(){ // Mo–So der laufenden Woche
   const off = (TODAY.getDay() + 6) % 7;
   return Array.from({length:7}, (_,i) => iso(addDays(TODAY, -off + i)));
@@ -445,7 +445,7 @@ function thisWeek(){ // Mo–So der laufenden Woche
 const WEEK = thisWeek();
 const strikesOf = id => S.strikes.filter(s => s.member===id && WEEK.includes(s.date));
 const deduction = id => strikesOf(id).reduce((n,s) => n + s.amount, 0);
-const payout = id => Math.max(0, (SACKGELD[id]||0) - deduction(id));
+const payout = id => Math.max(0, (mem(id).allowance || 0) - deduction(id));
 const choresOf = id => S.chores.filter(c => c.member === id);
 const openChoresToday = id => choresOf(id).filter(c => !c.done.includes(TODAY_ISO)).length;
 
@@ -482,6 +482,30 @@ function tint(hex, a){
 }
 const evEnd = e => e.end && e.end > e.date ? e.end : e.date;
 
+/* ============ Rechte ============ */
+/* Kein Ersatz für eine Anmeldung: eine Abmachung, die die App durchsetzt,
+   solange alle dieselbe Person eingestellt lassen. */
+function may(right, owner){
+  const me = mem(S.me);
+  if (me.role === 'parent') return true;
+  const lvl = S.perms[right] || 'eltern';
+  if (lvl === 'alle') return true;
+  if (lvl === 'eigene') return owner !== undefined && owner === S.me;
+  return false;
+}
+let toastTimer;
+function toast(msg){
+  let el = document.getElementById('toast');
+  if (!el){
+    el = document.createElement('div'); el.id = 'toast'; el.className = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2200);
+}
+const deny = () => toast('Dafür fehlt dir die Berechtigung.');
+
 /* ============ Router ============ */
 const TABS = [
   { id:'home',   label:'Start',    icon:'home' },
@@ -496,12 +520,15 @@ const $ = s => document.querySelector(s);
 
 function render(){
   const t = TABS.find(x => x.id === tab);
-  $('#topTitle').textContent = { home:'Startseite', cal:'Familienkalender', shop:'Einkauf', school:'Schule', chores:'Ämtli & Sackgeld', chat:'Familienchat' }[tab];
+  $('#topTitle').textContent = { home:'Startseite', cal:'Kalender', shop:'Einkauf', school:'Schule',
+    chores:'Ämtli & Sackgeld', chat:'Chat', profil:'Profile & Rechte' }[tab];
   $('#topDate').textContent = `${WDL[TODAY.getDay()]}, ${TODAY.getDate()}. ${MON[TODAY.getMonth()]} ${TODAY.getFullYear()}`;
   $('#tabs').innerHTML = TABS.map(x =>
     `<button class="tab" data-tab="${x.id}" ${x.id===tab?'aria-current="page"':''}>${icon(x.icon)}<span>${x.label}</span><i class="tabdot"></i></button>`
   ).join('');
-  $('#view').innerHTML = ({ home:viewHome, cal:viewCal, shop:viewShop, school:viewSchool, chores:viewChores, chat:viewChat })[tab]();
+  $('#view').innerHTML = ({ home:viewHome, cal:viewCal, shop:viewShop, school:viewSchool,
+    chores:viewChores, chat:viewChat, profil:viewProfil })[tab]();
+  if (tab === 'cal') initPlaner();
   if (tab === 'chat') window.scrollTo(0, document.body.scrollHeight);
   save();
 }
@@ -513,7 +540,7 @@ function viewHome(){
     return `<div class="person-col" style="--pc:${m.color}">
       ${av(m.id,'lg')}
       <div class="nm">${m.name}</div>
-      <div class="nx">${next ? esc(next.title) : (m.kid ? (openChoresToday(m.id) ? openChoresToday(m.id)+' Ämtli offen' : 'Alles erledigt') : 'Nichts eingetragen')}</div>
+      <div class="nx">${next ? esc(next.title) : (m.role==='kid' ? (openChoresToday(m.id) ? openChoresToday(m.id)+' Ämtli offen' : 'Alles erledigt') : 'Nichts eingetragen')}</div>
       ${next ? `<div class="tm">${next.time}</div>` : ''}
     </div>`;
   }).join('');
@@ -536,10 +563,10 @@ function viewHome(){
   <section class="sec">
     <div class="sec-head"><h2>Diese Woche</h2><button class="linkbtn" data-go="cal">Kalender</button></div>
     <div class="card">${next7.length ? next7.map(e => `
-      <div class="row" style="--pc:${M[e.member].color}">
+      <div class="row" style="--pc:${mem(e.member).color}">
         <i class="bar"></i>
         <div class="body"><div class="t">${esc(e.title)}</div>
-          <div class="s">${relDay(e.date)} · ${M[e.member].name}${e.place ? ' · '+esc(e.place) : ''}</div></div>
+          <div class="s">${relDay(e.date)} · ${mem(e.member).name}${e.place ? ' · '+esc(e.place) : ''}</div></div>
         <div class="r">${e.time||''}</div>
       </div>`).join('') : '<div class="empty">Keine Termine in den nächsten sieben Tagen.</div>'}
     </div>
@@ -548,9 +575,9 @@ function viewHome(){
   <section class="sec">
     <div class="sec-head"><h2>Schule</h2><button class="linkbtn" data-go="school">Alle</button></div>
     <div class="card">
-      ${pruef.map(p => `<div class="row" style="--pc:${M[p.member].color}"><i class="bar"></i>
+      ${pruef.map(p => `<div class="row" style="--pc:${mem(p.member).color}"><i class="bar"></i>
         <div class="body"><div class="t">${esc(p.subject)}: ${esc(p.title)}</div>
-        <div class="s">${M[p.member].name} · Prüfung ${relDay(p.due)}</div></div>
+        <div class="s">${mem(p.member).name} · Prüfung ${relDay(p.due)}</div></div>
         <div class="r">${daysUntil(p.due)===0?'heute':'in '+daysUntil(p.due)+'T'}</div></div>`).join('')}
       <div class="row"><div class="body"><div class="t">${hausis} Hausaufgaben bis morgen</div>
         <div class="s">offen über alle Kinder</div></div></div>
@@ -579,7 +606,7 @@ function viewHome(){
   </section>
   </div>
 
-  <p class="footnote">Ruchs Organisations App · <button data-reset>Alles zurücksetzen</button></p>`;
+  <p class="footnote">Ruchs Organisations App</p>`;
 }
 
 /* ============ Kalender ============ */
@@ -588,45 +615,37 @@ function planerHTML(){
   const nDays = new Date(y, mo+1, 0).getDate();
   const cols = filt === 'alle' ? MEMBERS : MEMBERS.filter(m => m.id === filt);
   const hol = holidays(y);
-  const first = `${y}-${String(mo+1).padStart(2,'0')}-01`;
-  const last  = `${y}-${String(mo+1).padStart(2,'0')}-${String(nDays).padStart(2,'0')}`;
+  const pad = n => String(n).padStart(2,'0');
+  const first = `${y}-${pad(mo+1)}-01`, last = `${y}-${pad(mo+1)}-${pad(nDays)}`;
 
-  /* Kopfzeile */
   let html = `<div class="p-corner" style="grid-area:1/1">KW</div>`;
   cols.forEach((m, i) => {
     html += `<div class="p-hcell" style="grid-row:1;grid-column:${i+2}">
-      <i style="background:${m.color}"></i>${m.name}</div>`;
+      <i style="background:${m.color}"></i>${esc(m.name)}</div>`;
   });
 
-  /* Streifen für Wochenenden und Feiertage */
   for (let d = 1; d <= nDays; d++){
     const dt = new Date(y, mo, d), k = iso(dt), wd = dt.getDay();
     if (wd === 0 || wd === 6 || hol[k])
-      html += `<div class="p-stripe ${hol[k]?'hol':''}" style="grid-row:${d+1}"></div>`;
+      html += `<div class="p-stripe" style="grid-row:${d+1}"></div>`;
   }
 
-  /* Tagesspalte */
   for (let d = 1; d <= nDays; d++){
     const dt = new Date(y, mo, d), k = iso(dt), wd = dt.getDay();
-    const kw = wd === 1 ? isoWeek(dt) : '';
     html += `<button class="p-day ${(wd===0||wd===6)?'we':''} ${(wd===0||hol[k])?'red':''}"
       style="grid-row:${d+1};grid-column:1" data-day="${k}"
       ${k===S.ui.calSel?'aria-pressed="true"':''} ${hol[k]?`title="${hol[k]}"`:''}>
-      <b>${d}</b><span>${WD[wd]}</span><u>${kw}</u></button>`;
+      <b>${d}</b><span>${WD[wd]}</span><u>${wd===1?isoWeek(dt):''}</u></button>`;
   }
 
-  /* Personenspalten mit den Einträgen */
   cols.forEach((m, ci) => {
     const evs = S.events
       .filter(e => e.member === m.id && e.date <= last && evEnd(e) >= first)
-      .map(e => {
-        const s0 = e.date < first ? 1 : new Date(e.date+'T00:00').getDate();
-        const s1 = evEnd(e) > last ? nDays : new Date(evEnd(e)+'T00:00').getDate();
-        return { ...e, a: s0, b: s1 };
-      })
-      .sort((x, y2) => x.a - y2.a || (y2.b - y2.a) - (x.b - x.a));
+      .map(e => ({ ...e,
+        a: e.date < first ? 1 : new Date(e.date+'T00:00').getDate(),
+        b: evEnd(e) > last ? nDays : new Date(evEnd(e)+'T00:00').getDate() }))
+      .sort((x, z) => x.a - z.a || (z.b - z.a) - (x.b - x.a));
 
-    /* Spuren berechnen, damit sich Überlappendes nebeneinander legt */
     const lanes = [];
     evs.forEach(e => {
       let l = lanes.findIndex(end => end < e.a);
@@ -635,48 +654,24 @@ function planerHTML(){
     });
     const L = Math.max(1, lanes.length);
 
-    const inner = evs.map(e => {
-      const span = e.b - e.a + 1;
-      const w = `calc(${(100/L).toFixed(4)}% - 3px)`;
-      return `<div class="p-ev" style="--pc:${e.member && M[e.member].color};
-        background:${tint(M[e.member].color, .13)};
+    const inner = evs.map(e => `<div class="p-ev" data-ev="${e.id}" style="--pc:${m.color};
+        background:${tint(m.color, .13)};
         top:calc(var(--rh) * ${e.a-1} + 2px);
-        height:calc(var(--rh) * ${span} - 4px);
-        left:calc(${(100/L*e.lane).toFixed(4)}% + 2px);width:${w}"
-        title="${esc(e.title)}">${e.time && span===1 ? `<b>${e.time}</b>` : ''}${esc(e.title)}</div>`;
-    }).join('');
+        height:calc(var(--rh) * ${e.b - e.a + 1} - 4px);
+        left:calc(${(100/L*e.lane).toFixed(4)}% + 2px);width:calc(${(100/L).toFixed(4)}% - 3px)"
+        title="${esc(e.title)}">${e.time && e.a===e.b ? `<b>${e.time}</b>` : ''}${esc(e.title)}</div>`).join('');
 
-    html += `<div class="p-col" style="grid-row:2/-1;grid-column:${ci+2}">${inner}</div>`;
+    html += `<div class="p-col" data-mcol="${m.id}" style="grid-row:2/-1;grid-column:${ci+2}">${inner}</div>`;
   });
 
-  return `<div class="p-wrap"><div class="p-scroll"><div class="pgrid"
+  return `<div class="p-wrap"><div class="p-scroll"><div class="pgrid" data-days="${nDays}"
+    data-y="${y}" data-mo="${mo}"
     style="grid-template-columns:58px repeat(${cols.length},minmax(${cols.length>2?'92px':'150px'},1fr));
-           grid-template-rows:34px repeat(${nDays},var(--rh))">${html}</div></div></div>
-    <p class="p-legend">Seitlich wischen, wenn nicht alle Spalten Platz haben. Auf einen Tag tippen zeigt ihn unten im Detail.</p>`;
-}
-
-function rasterHTML(){
-  const y = S.ui.calYear, mo = S.ui.calMonth, filt = S.ui.calFilter;
-  const first = new Date(y, mo, 1);
-  const start = addDays(first, -((first.getDay()+6)%7));
-  let cells = '';
-  for (let i = 0; i < 42; i++){
-    const d = addDays(start, i), k = iso(d);
-    const list = eventsOn(k).filter(e => filt==='alle' || e.member===filt);
-    const pips = [...new Set(list.map(e => e.member))].slice(0,4)
-      .map(id => `<i class="pip" style="background:${M[id].color}"></i>`).join('');
-    cells += `<button class="day ${d.getMonth()!==mo?'out':''} ${k===TODAY_ISO?'today':''}"
-      data-day="${k}" ${k===S.ui.calSel?'aria-pressed="true"':''}>
-      ${d.getDate()}<span class="pips">${pips}</span></button>`;
-  }
-  return `<div class="cal" style="margin-top:12px">
-    <div class="grid">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<div class="wd">${d}</div>`).join('')}</div>
-    <div class="grid">${cells}</div></div>`;
+           grid-template-rows:34px repeat(${nDays},var(--rh))">${html}</div></div></div>`;
 }
 
 function viewCal(){
   const y = S.ui.calYear, mo = S.ui.calMonth, filt = S.ui.calFilter;
-  const planer = S.ui.calView !== 'raster';
   const sel = S.events.filter(e => e.date <= S.ui.calSel && evEnd(e) >= S.ui.calSel)
     .filter(e => filt==='alle' || e.member===filt).sort(ev);
 
@@ -684,36 +679,147 @@ function viewCal(){
   <div class="sec-head" style="margin-bottom:8px">
     <div style="display:flex;align-items:center;gap:6px">
       <button class="iconbtn" data-mon="-1" aria-label="Vorheriger Monat">${icon('left',18)}</button>
-      <span class="mon" style="font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:600">${MON[mo]} ${y}</span>
+      <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:600">${MON[mo]} ${y}</span>
       <button class="iconbtn" data-mon="1" aria-label="Nächster Monat">${icon('right',18)}</button>
     </div>
-    <div class="seg">
-      <button data-calview="planer" aria-pressed="${planer}">Planer</button>
-      <button data-calview="raster" aria-pressed="${!planer}">Raster</button>
-    </div>
+    <button class="linkbtn" data-today>Heute</button>
   </div>
 
   <div class="chips">
     <button class="chip" data-filter="alle" aria-pressed="${filt==='alle'}">Alle</button>
     ${MEMBERS.map(m => `<button class="chip" data-filter="${m.id}" aria-pressed="${filt===m.id}">
-      <i class="dot" style="background:${m.color}"></i>${m.name}</button>`).join('')}
+      <i class="dot" style="background:${m.color}"></i>${esc(m.name)}</button>`).join('')}
   </div>
 
-  ${planer ? planerHTML() : rasterHTML()}
+  ${planerHTML()}
+  <p class="p-legend">Auf eine freie Stelle tippen legt einen Termin an. Auf einen Termin tippen öffnet ihn.
+    Lang drücken und ziehen verschiebt ihn auf einen anderen Tag oder zu einer anderen Person.</p>
 
   <section class="sec">
     <div class="sec-head"><h2>${relDay(S.ui.calSel)}</h2>
-      <button class="btn ghost" data-sheet="event">${icon('plus',15)} Termin</button></div>
+      ${may('events.edit') ? `<button class="btn ghost" data-sheet="event">${icon('plus',15)} Termin</button>` : ''}</div>
     <div class="card">${sel.length ? sel.map(e => `
-      <div class="row" style="--pc:${M[e.member].color}"><i class="bar"></i>
+      <div class="row" style="--pc:${mem(e.member).color}"><i class="bar"></i>
         ${av(e.member,'sm')}
         <div class="body"><div class="t">${esc(e.title)}</div>
-          <div class="s">${M[e.member].name}${e.end && e.end > e.date ? ' · '+fmtDay(e.date)+' bis '+fmtDay(e.end) : ''}${e.place ? ' · '+esc(e.place) : ''}</div></div>
+          <div class="s">${esc(mem(e.member).name)}${e.end && e.end > e.date ? ' · '+fmtDay(e.date)+' bis '+fmtDay(e.end) : ''}${e.place ? ' · '+esc(e.place) : ''}</div></div>
         <div class="r">${e.time||''}</div>
-        <button class="linkbtn" data-delev="${e.id}" aria-label="Termin löschen">×</button>
-      </div>`).join('') : '<div class="empty">Nichts geplant. Tippe auf „Termin“, um etwas einzutragen.</div>'}
+        ${may('events.edit') ? `<button class="linkbtn" data-editev="${e.id}" aria-label="Bearbeiten">›</button>` : ''}
+      </div>`).join('') : '<div class="empty">Nichts geplant.</div>'}
     </div>
   </section>`;
+}
+
+/* ---- Verschieben per Ziehen, funktioniert auch mit dem Finger ---- */
+let dragState = null;
+function initPlaner(){
+  const grid = document.querySelector('.pgrid');
+  if (!grid) return;
+  const nDays = +grid.dataset.days, Y = +grid.dataset.y, MO = +grid.dataset.mo;
+  const dayIso = d => `${Y}-${String(MO+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  const colAt = x => [...grid.querySelectorAll('.p-col')].find(c => {
+    const r = c.getBoundingClientRect(); return x >= r.left && x <= r.right;
+  });
+  const dayAt = (col, y) => {
+    const r = col.getBoundingClientRect();
+    return Math.min(nDays, Math.max(1, Math.floor((y - r.top) / (r.height / nDays)) + 1));
+  };
+
+  grid.addEventListener('pointerdown', e => {
+    const col = e.target.closest('.p-col'); if (!col) return;
+    const evEl = e.target.closest('.p-ev');
+    dragState = { x:e.clientX, y:e.clientY, col, evEl, id:evEl && evEl.dataset.ev,
+                  moved:false, drag:false, pid:e.pointerId };
+    if (evEl && may('events.edit'))
+      dragState.timer = setTimeout(() => beginDrag(e.clientX, e.clientY), 330);
+  });
+
+  function beginDrag(x, y){
+    const st = dragState; if (!st || !st.evEl) return;
+    st.drag = true;
+    document.body.classList.add('dragging');
+    const r = st.evEl.getBoundingClientRect();
+    st.offX = x - r.left; st.offY = y - r.top; st.w = r.width; st.h = r.height;
+    const g = st.evEl.cloneNode(true);
+    g.className = 'p-ev drag-ghost';
+    g.style.cssText = `--pc:${getComputedStyle(st.evEl).getPropertyValue('--pc')};
+      background:${st.evEl.style.background};width:${r.width}px;height:${r.height}px;
+      left:${r.left}px;top:${r.top}px`;
+    document.body.appendChild(g);
+    st.ghost = g; st.evEl.classList.add('ghosted');
+    try { grid.setPointerCapture(st.pid); } catch(err){}
+    if (navigator.vibrate) navigator.vibrate(12);
+  }
+
+  grid.addEventListener('pointermove', e => {
+    const st = dragState; if (!st) return;
+    if (!st.drag){
+      if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 10){ clearTimeout(st.timer); st.moved = true; }
+      return;
+    }
+    e.preventDefault();
+    st.ghost.style.left = (e.clientX - st.offX) + 'px';
+    st.ghost.style.top  = (e.clientY - st.offY) + 'px';
+    const col = colAt(e.clientX);
+    grid.querySelectorAll('.p-drop').forEach(n => n.remove());
+    if (col){
+      const d = dayAt(col, e.clientY - st.offY + st.h / 2);
+      const slot = document.createElement('div');
+      slot.className = 'p-drop';
+      slot.style.top = `calc(var(--rh) * ${d-1} + 2px)`;
+      slot.style.height = st.h + 'px';
+      col.appendChild(slot);
+      st.target = { member: col.dataset.mcol, day: d };
+    } else st.target = null;
+  });
+
+  function finish(e){
+    const st = dragState; if (!st) return;
+    clearTimeout(st.timer);
+    grid.querySelectorAll('.p-drop').forEach(n => n.remove());
+    if (st.drag){
+      document.body.classList.remove('dragging');
+      if (st.ghost) st.ghost.remove();
+      if (st.evEl) st.evEl.classList.remove('ghosted');
+      if (st.target && st.id){
+        const t = S.events.find(x => x.id === st.id);
+        if (t){
+          const span = t.end && t.end > t.date
+            ? Math.round((new Date(t.end+'T00:00') - new Date(t.date+'T00:00')) / 86400000) : 0;
+          const nd = dayIso(st.target.day);
+          t.date = nd;
+          if (span) t.end = iso(addDays(new Date(nd+'T00:00'), span));
+          t.member = st.target.member;
+          toast(`„${t.title}“ → ${esc(mem(t.member).name)}, ${fmtDay(nd)}`);
+        }
+      }
+      dragState = null; return render();
+    }
+    if (!st.moved){
+      if (st.id){
+        if (!may('events.edit')) { dragState = null; return deny(); }
+        dragState = null; return openSheet('editev', { id: st.id });
+      }
+      const d = dayAt(st.col, e.clientY);
+      S.ui.calSel = dayIso(d);
+      if (!may('events.edit')){ dragState = null; return render(); }
+      const pre = { member: st.col.dataset.mcol, date: dayIso(d) };
+      dragState = null; render(); return openSheet('event', pre);
+    }
+    dragState = null;
+  }
+  grid.addEventListener('pointerup', finish);
+  grid.addEventListener('pointercancel', () => {
+    const st = dragState;
+    if (st && st.drag){
+      document.body.classList.remove('dragging');
+      if (st.ghost) st.ghost.remove();
+      if (st.evEl) st.evEl.classList.remove('ghosted');
+      grid.querySelectorAll('.p-drop').forEach(n => n.remove());
+    }
+    dragState = null;
+  });
 }
 
 /* ============ Einkauf ============ */
@@ -728,16 +834,16 @@ function viewShop(){
       <button class="chip" data-list="${l.id}" aria-pressed="${l.id===list.id}">${esc(l.name)} <span class="qty">${o}</span></button>`;}).join('')}
   </div>
 
-  <div class="addbar">
+  ${may('shop.edit') ? `<div class="addbar">
     <input id="shopInput" placeholder="Was fehlt?" aria-label="Artikel hinzufügen">
     <button class="btn" data-additem>Hinzufügen</button>
-  </div>
+  </div>` : ''}
 
   <div class="card" style="margin-top:10px">
     ${sorted.length ? sorted.map(i => `
-      <div class="row ${i.done?'done':''}" style="--pc:${M[i.by].color}">
+      <div class="row ${i.done?'done':''}" style="--pc:${mem(i.by).color}">
         <button class="check" data-item="${i.id}" aria-pressed="${i.done}" aria-label="Abhaken">${icon('check',13)}</button>
-        <div class="body"><div class="t">${esc(i.text)}</div><div class="s">von ${M[i.by].name}</div></div>
+        <div class="body"><div class="t">${esc(i.text)}</div><div class="s">von ${mem(i.by).name}</div></div>
         <button class="linkbtn" data-delitem="${i.id}" aria-label="Löschen">×</button>
       </div>`).join('') : '<div class="empty">Liste ist leer. Alles eingekauft.</div>'}
   </div>
@@ -747,7 +853,7 @@ function viewShop(){
 
   <section class="sec">
     <div class="sec-head"><h2>Wochenmenü</h2>
-      <button class="btn ghost" data-sheet="menu">${icon('plus',15)} Menü</button></div>
+      ${may('shop.edit') ? `<button class="btn ghost" data-sheet="menu">${icon('plus',15)} Menü</button>` : ''}</div>
     <div class="card">
       ${S.menu.length ? S.menu.map((m,ix) => `<div class="row">
         <div class="body"><div class="t">${m.day} · ${esc(m.meal)}</div>
@@ -776,12 +882,12 @@ function viewSchool(){
 
   <section class="sec">
     <div class="sec-head"><h2>Prüfungen</h2>
-      <button class="btn ghost" data-sheet="school">${icon('plus',15)} Eintrag</button></div>
+      ${may('school.edit') ? `<button class="btn ghost" data-sheet="school">${icon('plus',15)} Eintrag</button>` : ''}</div>
     <div class="card">${pruef.length ? pruef.map(p => { const n = daysUntil(p.due); return `
-      <div class="row" style="--pc:${M[p.member].color}"><i class="bar"></i>
+      <div class="row" style="--pc:${mem(p.member).color}"><i class="bar"></i>
         ${av(p.member,'sm')}
         <div class="body"><div class="t">${esc(p.subject)}: ${esc(p.title)}</div>
-          <div class="s">${fmtDay(p.due)} · ${M[p.member].name}</div></div>
+          <div class="s">${fmtDay(p.due)} · ${mem(p.member).name}</div></div>
         <div class="r" ${n<=2?'style="color:var(--alert)"':''}>${n===0?'heute':n===1?'morgen':'in '+n+' T'}</div>
       </div>`; }).join('') : '<div class="empty">Keine Prüfungen eingetragen.</div>'}
     </div>
@@ -791,10 +897,10 @@ function viewSchool(){
     <div class="sec-head"><h2>Hausaufgaben</h2>
       <span class="hint">${hausi.filter(h=>!h.done).length} offen</span></div>
     <div class="card">${hausi.length ? hausi.map(h => `
-      <div class="row ${h.done?'done':''}" style="--pc:${M[h.member].color}">
+      <div class="row ${h.done?'done':''}" style="--pc:${mem(h.member).color}">
         <button class="check" data-hw="${h.id}" aria-pressed="${h.done}" aria-label="Erledigt">${icon('check',13)}</button>
         <div class="body"><div class="t">${esc(h.subject)}: ${esc(h.title)}</div>
-          <div class="s">${M[h.member].name} · bis ${relDay(h.due)}</div></div>
+          <div class="s">${mem(h.member).name} · bis ${relDay(h.due)}</div></div>
       </div>`).join('') : '<div class="empty">Nichts aufgegeben.</div>'}
     </div>
   </section>`;
@@ -805,7 +911,7 @@ function viewChores(){
   return `
   <section class="sec">
     <div class="sec-head"><h2>Ämtli heute</h2>
-      <button class="btn ghost" data-sheet="chore">${icon('plus',15)} Ämtli</button></div>
+      ${may('chores.edit') ? `<button class="btn ghost" data-sheet="chore">${icon('plus',15)} Ämtli</button>` : ''}</div>
     ${KIDS.map(k => `
       <div class="card" style="--pc:${k.color}">
         <div style="display:flex;align-items:center;gap:10px">
@@ -835,42 +941,104 @@ function viewChores(){
             <div class="strikes">${st.length ? '|'.repeat(Math.min(st.length,12)) : '<span style="color:var(--muted);font-family:Inter">keine Striche</span>'}</div></div>
         </div>
         <div class="money"><span class="big">${chf(payout(k.id))}</span>
-          ${abz ? `<span class="was">${chf(SACKGELD[k.id])}</span>` : ''}</div>
+          ${abz ? `<span class="was">${chf(mem(k.id).allowance || 0)}</span>` : ''}</div>
         ${st.length ? `<div class="ledger">${st.map(s => `
           <div class="li"><span>${fmtDay(s.date)} · ${esc(s.reason)}</span>
             <span><b>−${s.amount.toFixed(2)}</b>
             <button class="linkbtn" data-unstrike="${s.id}" aria-label="Strich entfernen">×</button></span></div>`).join('')}</div>` : ''}
-        <div class="tallybtns">
-          ${REASONS.map(r => `<button class="tallybtn" data-strike="${k.id}|${r.r}|${r.a}">+ ${r.r}</button>`).join('')}
-        </div>
+        ${may('strikes.set') ? `<div class="tallybtns">
+          ${S.reasons.map(r => `<button class="tallybtn" data-strike="${k.id}|${r.id}">+ ${esc(r.text)}</button>`).join('')}
+          ${S.reasons.length ? '' : '<span class="qty">Gründe legst du unter Profile an.</span>'}
+        </div>` : ''}
       </div>`;
     }).join('')}
     <p class="footnote">Basis: CHF 1.00 pro Lebensjahr und Woche. Auszahlung sonntags.</p>
   </section>`;
 }
 
+/* ============ Profile und Rechte ============ */
+function viewProfil(){
+  const admin = may('admin');
+  return `
+  <section class="sec">
+    <div class="sec-head"><h2>Ich bin</h2><span class="hint">gilt auf diesem Gerät</span></div>
+    <div class="chips">
+      ${MEMBERS.filter(m => m.role !== 'shared').map(m => `
+        <button class="chip" data-me="${m.id}" aria-pressed="${S.me===m.id}">
+          <i class="dot" style="background:${m.color}"></i>${esc(m.name)}</button>`).join('')}
+    </div>
+    <p class="p-legend" style="text-align:left;margin-top:8px">
+      Solange es keine Anmeldung gibt, ist das eine Einstellung und keine Sperre.
+      Sie hält die App an die Abmachung, wer was ändern darf.</p>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head"><h2>Personen</h2>
+      ${admin ? `<button class="btn ghost" data-sheet="member">${icon('plus',15)} Person</button>` : ''}</div>
+    <div class="card">
+      ${MEMBERS.map(m => `<div class="row" style="--pc:${m.color}">
+        ${av(m.id)}
+        <div class="body"><div class="t">${esc(m.name)}${m.id===S.me?' · du':''}</div>
+          <div class="s">${m.role==='parent'?'Elternteil':m.role==='kid'?`Kind · CHF ${(m.allowance||0).toFixed(2)} pro Woche`:'Gemeinsame Spalte'}</div></div>
+        ${admin ? `<button class="linkbtn" data-editmem="${m.id}">›</button>` : ''}
+      </div>`).join('')}
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head"><h2>Wer darf was</h2><span class="hint">Eltern dürfen immer alles</span></div>
+    <div class="card">
+      ${Object.keys(PERM_LABELS).map(k => `
+        <div class="permrow">
+          <div class="t">${PERM_LABELS[k]}</div>
+          <div class="seg">${PERM_LEVELS.map(l => `
+            <button data-perm="${k}|${l.v}" aria-pressed="${(S.perms[k]||'eltern')===l.v}"
+              ${admin?'':'disabled'}>${l.l}</button>`).join('')}</div>
+        </div>`).join('')}
+    </div>
+    <p class="p-legend" style="text-align:left">„Eigene“ heisst: nur das, was der eigenen Person zugeordnet ist.
+      Bei Rechten ohne Personenbezug wirkt „Eigene“ wie „Nur Eltern“.</p>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head"><h2>Strichgründe</h2>
+      ${admin ? `<button class="btn ghost" data-sheet="reason">${icon('plus',15)} Grund</button>` : ''}</div>
+    <div class="card">
+      ${S.reasons.length ? S.reasons.map(r => `<div class="row">
+        <div class="body"><div class="t">${esc(r.text)}</div></div>
+        <div class="r" style="color:var(--alert)">−${r.amount.toFixed(2)}</div>
+        ${admin ? `<button class="linkbtn" data-delreason="${r.id}" aria-label="Löschen">×</button>` : ''}
+      </div>`).join('') : '<div class="empty">Noch kein Grund angelegt.</div>'}
+    </div>
+  </section>
+
+  <p class="footnote">Ruchs Organisations App · <button data-reset>Alles zurücksetzen</button></p>`;
+}
+
 /* ============ Chat ============ */
 function viewChat(){
   return `
   <div class="chatwrap">
-    ${S.chat.map(m => `<div class="msg ${m.member==='ka'?'me':''}">
+    ${S.chat.map(m => `<div class="msg ${m.member===S.me?'me':''}">
       ${av(m.member,'sm')}
-      <div><div class="who">${M[m.member].name} · ${m.t}</div><div class="bub">${esc(m.text)}</div></div>
+      <div><div class="who">${mem(m.member).name} · ${m.t}</div><div class="bub">${esc(m.text)}</div></div>
     </div>`).join('')}
   </div>
-  <div class="chatbar">
+  ${may('chat.write') ? `<div class="chatbar">
     <input id="chatInput" placeholder="Nachricht an die Familie" aria-label="Nachricht schreiben">
     <button class="btn" data-send>Senden</button>
-  </div>`;
+  </div>` : '<p class="p-legend">Du darfst hier nur mitlesen.</p>'}`;
 }
 
 /* ============ Sheets ============ */
-function openSheet(kind){
-  const sel = S.ui.calSel;
+let editId = null;
+function openSheet(kind, pre){
+  pre = pre || {};
+  const sel = pre.date || S.ui.calSel;
   const html = kind === 'event' ? `
     <h3>Neuer Termin</h3>
     <div class="field"><label for="f-title">Was</label><input id="f-title" placeholder="z. B. Zahnarzt"></div>
-    <div class="field"><label for="f-mem">Wer</label><select id="f-mem">${MEMBERS.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+    <div class="field"><label for="f-mem">Wer</label><select id="f-mem">${MEMBERS.map(m=>`<option value="${m.id}" ${pre.member===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
     <div class="field two">
       <div style="flex:2"><label for="f-date">Wann</label><input id="f-date" type="date" value="${sel}"></div>
       <div style="flex:1"><label for="f-time">Zeit</label><input id="f-time" type="time" value="17:00"></div>
@@ -878,12 +1046,51 @@ function openSheet(kind){
     <div class="field"><label for="f-end">Bis (nur bei mehrtägigem, sonst leer lassen)</label><input id="f-end" type="date"></div>
     <div class="field"><label for="f-place">Wo (optional)</label><input id="f-place" placeholder="Ort"></div>
     <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="event">Termin sichern</button></div>`
+  : kind === 'editev' ? (() => {
+      const e = S.events.find(x => x.id === pre.id) || {};
+      editId = pre.id;
+      return `
+    <h3>Termin bearbeiten</h3>
+    <div class="field"><label for="f-title">Was</label><input id="f-title" value="${esc(e.title||'')}"></div>
+    <div class="field"><label for="f-mem">Wer</label><select id="f-mem">${MEMBERS.map(m=>`<option value="${m.id}" ${e.member===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
+    <div class="field two">
+      <div style="flex:2"><label for="f-date">Von</label><input id="f-date" type="date" value="${e.date||''}"></div>
+      <div style="flex:1"><label for="f-time">Zeit</label><input id="f-time" type="time" value="${e.time||''}"></div>
+    </div>
+    <div class="field"><label for="f-end">Bis (leer bei eintägig)</label><input id="f-end" type="date" value="${e.end||''}"></div>
+    <div class="field"><label for="f-place">Wo</label><input id="f-place" value="${esc(e.place||'')}"></div>
+    <div class="actions"><button class="btn ghost" data-delev="${pre.id}">Löschen</button><button class="btn" data-save="editev">Sichern</button></div>`;
+    })()
   : kind === 'chore' ? `
     <h3>Neues Ämtli</h3>
     <div class="field"><label for="f-mem">Kind</label><select id="f-mem">${KIDS.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
     <div class="field"><label for="f-title">Was</label><input id="f-title" placeholder="z. B. Abfall rausbringen"></div>
     <div class="field"><label for="f-rhythm">Wie oft</label><input id="f-rhythm" placeholder="täglich, Mo/Do, wöchentlich …" value="täglich"></div>
     <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="chore">Ämtli sichern</button></div>`
+  : kind === 'member' || kind === 'editmem' ? (() => {
+      const m = kind==='editmem' ? (MEMBERS.find(x => x.id === pre.id) || {}) : { color:'#7A7268', role:'kid', allowance:5 };
+      editId = kind==='editmem' ? pre.id : null;
+      return `
+    <h3>${kind==='editmem' ? 'Person bearbeiten' : 'Neue Person'}</h3>
+    <div class="field"><label for="f-name">Name</label><input id="f-name" value="${esc(m.name||'')}" placeholder="Vorname"></div>
+    <div class="field two">
+      <div style="flex:1"><label for="f-role">Rolle</label><select id="f-role">
+        <option value="parent" ${m.role==='parent'?'selected':''}>Elternteil</option>
+        <option value="kid" ${m.role==='kid'?'selected':''}>Kind</option>
+        <option value="shared" ${m.role==='shared'?'selected':''}>Gemeinsame Spalte</option></select></div>
+      <div style="flex:1"><label for="f-color">Farbe</label><input id="f-color" type="color" value="${m.color||'#7A7268'}" style="height:42px;padding:3px"></div>
+    </div>
+    <div class="field"><label for="f-allow">Sackgeld pro Woche in CHF, nur bei Kindern</label>
+      <input id="f-allow" type="number" step="0.5" min="0" value="${m.allowance!=null?m.allowance:''}"></div>
+    <div class="actions">
+      ${kind==='editmem' ? `<button class="btn ghost" data-delmem="${pre.id}">Löschen</button>` : '<button class="btn ghost" data-close>Abbrechen</button>'}
+      <button class="btn" data-save="member">Sichern</button></div>`;
+    })()
+  : kind === 'reason' ? `
+    <h3>Neuer Strichgrund</h3>
+    <div class="field"><label for="f-rtext">Grund</label><input id="f-rtext" placeholder="z. B. Znüni vergessen"></div>
+    <div class="field"><label for="f-ramt">Abzug in CHF</label><input id="f-ramt" type="number" step="0.5" min="0" value="0.5"></div>
+    <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="reason">Grund sichern</button></div>`
   : kind === 'menu' ? `
     <h3>Neues Menü</h3>
     <div class="field"><label for="f-day">Tag</label><select id="f-day">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<option>${d}</option>`).join('')}</select></div>
@@ -917,44 +1124,69 @@ document.addEventListener('click', e => {
   if (d.go){ tab = d.go; window.scrollTo(0,0); return render(); }
   if ('reset' in d){
     if (!confirm('Alle Einträge löschen? Die Termine aus dem Papierkalender werden neu eingelesen, alles andere ist weg.')) return;
-    S = seed(); applyImport(); return render();
+    S = seed(); refreshMembers(); applyImport(); return render();
   }
   if ('close' in d) return closeSheet();
   if (d.sheet) return openSheet(d.sheet);
 
+  if (d.me){ S.me = d.me; return render(); }
+  if (d.perm){ if (!may('admin')) return deny();
+    const [k,v] = d.perm.split('|'); S.perms[k] = v; return render(); }
+  if (d.editmem){ if (!may('admin')) return deny(); return openSheet('editmem', { id:d.editmem }); }
+  if (d.delmem){ if (!may('admin')) return deny();
+    if (S.members.length <= 1) return toast('Die letzte Person lässt sich nicht löschen.');
+    if (!confirm('Person löschen? Ihre Termine bleiben bestehen und werden als „Unbekannt“ angezeigt.')) return;
+    S.members = S.members.filter(m => m.id !== d.delmem);
+    if (S.me === d.delmem) S.me = S.members[0].id;
+    refreshMembers(); closeSheet(); return render(); }
+  if (d.delreason){ if (!may('admin')) return deny();
+    S.reasons = S.reasons.filter(r => r.id !== d.delreason); return render(); }
+  if (d.editev){ if (!may('events.edit')) return deny(); return openSheet('editev', { id:d.editev }); }
+  if ('today' in d){ S.ui.calMonth = TODAY.getMonth(); S.ui.calYear = TODAY.getFullYear();
+    S.ui.calSel = TODAY_ISO; return render(); }
   if (d.mon){ let m = S.ui.calMonth + (+d.mon); if (m < 0){ m = 11; S.ui.calYear--; } if (m > 11){ m = 0; S.ui.calYear++; } S.ui.calMonth = m; return render(); }
   if (d.day){ S.ui.calSel = d.day; const dd = new Date(d.day+'T00:00'); S.ui.calMonth = dd.getMonth(); S.ui.calYear = dd.getFullYear(); return render(); }
-  if (d.calview){ S.ui.calView = d.calview; return render(); }
   if (d.filter){ S.ui.calFilter = d.filter; return render(); }
-  if (d.delev){ S.events = S.events.filter(x => x.id !== d.delev); return render(); }
+  if (d.delev){ if (!may('events.edit')) return deny();
+    S.events = S.events.filter(x => x.id !== d.delev); closeSheet(); return render(); }
 
   if (d.list){ S.ui.list = d.list; return render(); }
   if ('hidedone' in d){ S.ui.hideDone = !S.ui.hideDone; return render(); }
-  if (d.item){ const l = S.lists.find(l=>l.id===S.ui.list); const i = l.items.find(i=>i.id===d.item); i.done = !i.done; return render(); }
-  if (d.delitem){ const l = S.lists.find(l=>l.id===S.ui.list); l.items = l.items.filter(i=>i.id!==d.delitem); return render(); }
+  if (d.item){ if (!may('shop.edit')) return deny();
+    const l = S.lists.find(l=>l.id===S.ui.list); const i = l.items.find(i=>i.id===d.item); i.done = !i.done; return render(); }
+  if (d.delitem){ if (!may('shop.edit')) return deny();
+    const l = S.lists.find(l=>l.id===S.ui.list); l.items = l.items.filter(i=>i.id!==d.delitem); return render(); }
   if ('additem' in d){ addItem(); return; }
   if (d.menu){
     const l = S.lists.find(l=>l.id===S.ui.list);
     S.menu[+d.menu].zutaten.forEach(z => {
       if (!l.items.some(i => i.text.toLowerCase() === z.toLowerCase()))
-        l.items.push({ id:uid(), text:z, done:false, by:'ka' });
+        l.items.push({ id:uid(), text:z, done:false, by:S.me });
     });
     return render();
   }
 
   if (d.sfilter){ S.ui.schoolFilter = d.sfilter; return render(); }
-  if (d.hw){ const h = S.school.find(x=>x.id===d.hw); h.done = !h.done; return render(); }
+  if (d.hw){ const h = S.school.find(x=>x.id===d.hw);
+    if (!may('school.check', h.member)) return deny();
+    h.done = !h.done; return render(); }
 
   if (d.chore){
     const c = S.chores.find(x=>x.id===d.chore);
+    if (!may('chores.check', c.member)) return deny();
     c.done = c.done.includes(TODAY_ISO) ? c.done.filter(x=>x!==TODAY_ISO) : [...c.done, TODAY_ISO];
     return render();
   }
-  if (d.delchore){ S.chores = S.chores.filter(c => c.id !== d.delchore); return render(); }
+  if (d.delchore){ if (!may('chores.edit')) return deny();
+    S.chores = S.chores.filter(c => c.id !== d.delchore); return render(); }
   if (d.delmenu){ S.menu.splice(+d.delmenu, 1); return render(); }
-  if (d.strike){ const [m,r,a] = d.strike.split('|');
-    S.strikes.push({ id:uid(), member:m, reason:r, date:TODAY_ISO, amount:parseFloat(a) }); return render(); }
-  if (d.unstrike){ S.strikes = S.strikes.filter(s=>s.id!==d.unstrike); return render(); }
+  if (d.strike){ if (!may('strikes.set')) return deny();
+    const [mid, rid] = d.strike.split('|');
+    const r = S.reasons.find(x => x.id === rid); if (!r) return;
+    S.strikes.push({ id:uid(), member:mid, reason:r.text, date:TODAY_ISO, amount:r.amount });
+    return render(); }
+  if (d.unstrike){ if (!may('strikes.set')) return deny();
+    S.strikes = S.strikes.filter(s=>s.id!==d.unstrike); return render(); }
 
   if ('send' in d) return sendMsg();
 
@@ -965,6 +1197,35 @@ document.addEventListener('click', e => {
       time:$('#f-time').value, place:$('#f-place').value.trim(),
       ...(end && end > $('#f-date').value ? { end } : {}) });
     S.ui.calSel = $('#f-date').value; closeSheet(); return render();
+  }
+  if (d.save === 'editev'){
+    const t = S.events.find(x => x.id === editId); if (!t) return closeSheet();
+    const title = $('#f-title').value.trim(); if (!title) return $('#f-title').focus();
+    const end = $('#f-end').value;
+    t.title = title; t.member = $('#f-mem').value; t.date = $('#f-date').value;
+    t.time = $('#f-time').value; t.place = $('#f-place').value.trim();
+    if (end && end > t.date) t.end = end; else delete t.end;
+    closeSheet(); return render();
+  }
+  if (d.save === 'member'){
+    const name = $('#f-name').value.trim(); if (!name) return $('#f-name').focus();
+    const role = $('#f-role').value;
+    const allow = parseFloat($('#f-allow').value);
+    const data = { name, role, color:$('#f-color').value,
+                   ...(role==='kid' ? { allowance: isNaN(allow) ? 0 : allow } : {}) };
+    if (editId){
+      const m = S.members.find(x => x.id === editId);
+      Object.assign(m, data); if (role !== 'kid') delete m.allowance;
+    } else {
+      S.members.push({ id:'m'+uid(), ...data });
+    }
+    refreshMembers(); closeSheet(); return render();
+  }
+  if (d.save === 'reason'){
+    const text = $('#f-rtext').value.trim(); if (!text) return $('#f-rtext').focus();
+    const amt = parseFloat($('#f-ramt').value);
+    S.reasons.push({ id:'r'+uid(), text, amount: isNaN(amt) ? 0.5 : amt });
+    closeSheet(); return render();
   }
   if (d.save === 'chore'){
     const title = $('#f-title').value.trim(); if (!title) return $('#f-title').focus();
@@ -996,13 +1257,15 @@ document.addEventListener('keypress', e => {
 
 function addItem(){
   const el = $('#shopInput'); const v = el.value.trim(); if (!v) return el.focus();
-  S.lists.find(l => l.id === S.ui.list).items.push({ id:uid(), text:v, done:false, by:'ka' });
+  if (!may('shop.edit')) return deny();
+  S.lists.find(l => l.id === S.ui.list).items.push({ id:uid(), text:v, done:false, by:S.me });
   render(); $('#shopInput').focus();
 }
 function sendMsg(){
   const el = $('#chatInput'); const v = el.value.trim(); if (!v) return el.focus();
   const now = new Date();
-  S.chat.push({ id:uid(), member:'ka', text:v,
+  if (!may('chat.write')) return deny();
+  S.chat.push({ id:uid(), member:S.me, text:v,
     t:`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}` });
   render(); $('#chatInput').focus();
 }
@@ -1023,6 +1286,10 @@ $('#themeBtn').addEventListener('click', () => {
   paintTheme();
 });
 
+$('#meBtn').innerHTML = icon('user',19);
+$('#meBtn').addEventListener('click', () => {
+  tab = tab === 'profil' ? 'home' : 'profil'; window.scrollTo(0,0); render();
+});
 paintTheme();
 render();
 
