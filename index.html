@@ -258,6 +258,14 @@ body.dragging .p-scroll{touch-action:none}
   padding:9px 16px;border-radius:999px;font-size:13.5px;z-index:300;opacity:0;
   transition:opacity .18s ease,transform .18s ease;pointer-events:none;max-width:84%;text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+.micbox{display:flex;align-items:center;gap:12px;background:var(--surface-2);
+  border:1px solid var(--line-soft);border-radius:var(--radius);padding:11px 12px;margin-bottom:14px}
+.micbtn{width:42px;height:42px;flex:none;border-radius:50%;background:var(--ink);color:var(--paper);
+  display:grid;place-items:center}
+.micbtn.hoert{background:var(--alert);animation:pulsiert 1.1s ease-in-out infinite}
+@keyframes pulsiert{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+.micline{font-size:13px;font-weight:500}
+.micsub{font-size:12px;color:var(--muted);margin-top:2px}
 .permrow{padding:11px 0;border-bottom:1px solid var(--line-soft)}
 .permrow:last-child{border-bottom:none}
 .permrow .t{font-size:14px;margin-bottom:7px}
@@ -364,7 +372,8 @@ const I = {
   sun:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2 12h2M20 12h2M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5"/>',
   moon:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
   pin:'<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
-  user:'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>'
+  user:'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+  mic:'<rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'
 };
 const icon = (n, s = 20) =>
   `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
@@ -648,6 +657,137 @@ function scaleImage(file, size){
   });
 }
 
+/* ============ Spracheingabe ============ */
+const ZAHL = { null:0, eins:1, ein:1, eine:1, zwei:2, drei:3, vier:4, fünf:5, fuenf:5,
+  sechs:6, sieben:7, acht:8, neun:9, zehn:10, elf:11, zwölf:12, zwoelf:12,
+  dreizehn:13, vierzehn:14, fünfzehn:15, fuenfzehn:15, sechzehn:16, siebzehn:17,
+  achtzehn:18, neunzehn:19, zwanzig:20, einundzwanzig:21, zweiundzwanzig:22, dreiundzwanzig:23 };
+
+const entu = s => s.toLowerCase()
+  .replace(/ä/g,'a').replace(/ö/g,'o').replace(/ü/g,'u').replace(/ß/g,'ss');
+
+function parseSpeech(text, members){
+  let t = ' ' + text.toLowerCase().replace(/\s+/g,' ').trim() + ' ';
+
+  /* 1. "halb sieben" -> 6:30, "viertel vor acht" -> 7:45, "viertel nach acht" -> 8:15 */
+  const zahlMuster = Object.keys(ZAHL).join('|');
+  t = t.replace(new RegExp(`\\bviertel vor (${zahlMuster}|\\d{1,2})\\b`,'g'),
+    (_,z) => { const n = ZAHL[z] ?? +z; return ` ${((n+23)%24)}:45 `; });
+  t = t.replace(new RegExp(`\\bviertel nach (${zahlMuster}|\\d{1,2})\\b`,'g'),
+    (_,z) => { const n = ZAHL[z] ?? +z; return ` ${n}:15 `; });
+  t = t.replace(new RegExp(`\\bhalb (${zahlMuster}|\\d{1,2})\\b`,'g'),
+    (_,z) => { const n = ZAHL[z] ?? +z; return ` ${((n+23)%24)}:30 `; });
+
+  /* 2. Zahlwörter zu Ziffern, aber nur wo eine Zeit gemeint sein kann */
+  t = t.replace(new RegExp(`\\b(${zahlMuster})\\b(?=\\s*(uhr|bis|\\s|$))`,'g'), (m,w) => ` ${ZAHL[w]} `);
+
+  /* 3. Zeitangaben einsammeln */
+  const zeiten = [];
+  const merk = (h, m, i, len) => {
+    h = +h; m = m ? +m : 0;
+    if (h > 23 || m > 59) return;
+    zeiten.push({ v: String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0'), i, len });
+  };
+  let mm;
+  const re1 = /\b(\d{1,2})[:.](\d{2})\b/g;                       // 17:30 oder 17.30
+  while ((mm = re1.exec(t))) merk(mm[1], mm[2], mm.index, mm[0].length);
+  const re2 = /\b(\d{1,2})\s*uhr(?:\s*(\d{1,2}))?/g;             // 17 Uhr 30
+  while ((mm = re2.exec(t))) merk(mm[1], mm[2], mm.index, mm[0].length);
+  const re3 = /\b(?:von|ab|um|bis)\s+(\d{1,2})\b(?!\s*[:.]\d|\s*uhr)/g;  // "von 17 bis 19"
+  while ((mm = re3.exec(t))) {
+    const zi = mm.index + mm[0].indexOf(mm[1]);
+    if (!zeiten.some(z => zi >= z.i && zi < z.i + z.len)) merk(mm[1], 0, zi, mm[1].length);
+  }
+  zeiten.sort((a,b) => a.i - b.i);
+
+  /* 3b. Stunden 1 bis 6 meinen im Familienalltag den Nachmittag,
+         ausser jemand sagt ausdrücklich morgens oder früh. */
+  const frueh = /\b(morgens|früh|frueh|vormittag|vormittags|nachts|in der nacht)\b/.test(t);
+  if (!frueh) zeiten.forEach(z => {
+    const h = +z.v.slice(0,2);
+    if (h >= 1 && h <= 6) z.v = String(h+12).padStart(2,'0') + z.v.slice(2);
+  });
+  /* Endet es vor dem Beginn, ist der Nachmittag gemeint */
+  if (zeiten.length > 1 && zeiten[1].v < zeiten[0].v){
+    const h = +zeiten[1].v.slice(0,2);
+    if (h + 12 <= 23) zeiten[1].v = String(h+12).padStart(2,'0') + zeiten[1].v.slice(2);
+  }
+
+  /* 4. Person suchen */
+  let person = null, pTreffer = null;
+  const tn = entu(t);
+  for (const m of members){
+    const kandidaten = [entu(m.name)];
+    if (m.role === 'shared') kandidaten.push('alle','familie','gemeinsam');
+    for (const k of kandidaten){
+      const r = new RegExp(`\\b${k}\\b`);
+      const tr = r.exec(tn);
+      if (tr){ person = m.id; pTreffer = { i: tr.index, len: k.length }; break; }
+    }
+    if (person) break;
+  }
+
+  /* 5. Alles Erkannte herausschneiden, Rest ist die Tätigkeit */
+  const schnitte = zeiten.map(z => ({ i:z.i, len:z.len }));
+  if (pTreffer) schnitte.push(pTreffer);
+  schnitte.sort((a,b) => b.i - a.i);
+  let rest = t;
+  schnitte.forEach(s => { rest = rest.slice(0, s.i) + ' ' + rest.slice(s.i + s.len); });
+
+  rest = rest
+    .replace(/\b(von|bis|ab|um|uhr|für|fuer|mit|und|der|die|das|dann|noch|hat|haben|ist|morgens|früh|frueh|vormittag|vormittags|nachmittags|abends|nachts)\b/g,' ')
+    .replace(/[,.;]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  const titel = rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : '';
+
+  return { time: zeiten[0] ? zeiten[0].v : '', timeEnd: zeiten[1] ? zeiten[1].v : '', member: person, title: titel };
+}
+
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let hoert = null;
+function speechAn(){
+  if (!SR){
+    toast('Dieses Gerät kennt keine Spracherkennung. Nutze das Mikrofon auf der Tastatur.');
+    return;
+  }
+  if (hoert){ hoert.stop(); return; }
+  const r = new SR();
+  r.lang = 'de-CH'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
+  const knopf = document.getElementById('micBtn');
+  const anzeige = document.getElementById('micText');
+  if (knopf) knopf.classList.add('hoert');
+  if (anzeige) anzeige.textContent = 'Hört zu …';
+
+  r.onresult = e => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    if (anzeige) anzeige.textContent = txt;
+    if (e.results[e.results.length-1].isFinal) uebernehmen(txt);
+  };
+  r.onerror = e => {
+    if (anzeige) anzeige.textContent = e.error === 'not-allowed'
+      ? 'Zugriff aufs Mikrofon verweigert.' : 'Nichts verstanden.';
+  };
+  r.onend = () => { hoert = null; if (knopf) knopf.classList.remove('hoert'); };
+  try { r.start(); hoert = r; } catch(err){ toast('Mikrofon nicht verfügbar.'); }
+}
+function uebernehmen(txt){
+  const g = parseSpeech(txt, MEMBERS);
+  const setz = (id, wert) => { const el = document.getElementById(id); if (el && wert) el.value = wert; };
+  setz('f-time', g.time); setz('f-timeend', g.timeEnd); setz('f-title', g.title);
+  if (g.member){ const el = document.getElementById('f-mem'); if (el) el.value = g.member; }
+  const anzeige = document.getElementById('micText');
+  if (anzeige){
+    const teile = [];
+    if (g.time) teile.push(g.time + (g.timeEnd ? '–' + g.timeEnd : ''));
+    if (g.member) teile.push(mem(g.member).name);
+    if (g.title) teile.push(g.title);
+    anzeige.textContent = teile.length ? 'Verstanden: ' + teile.join(' · ') : 'Nichts erkannt.';
+  }
+}
+
 /* ============ Rechte ============ */
 /* Kein Ersatz für eine Anmeldung: eine Abmachung, die die App durchsetzt,
    solange alle dieselbe Person eingestellt lassen. */
@@ -749,10 +889,11 @@ const TABLES = {
   },
   events: {
     rows: () => S.events.map(e => ({ id:e.id, member_id:e.member, title:e.title,
-      date:e.date, end_date: nz(e.end), time: nz(e.time), place: nz(e.place) })),
+      date:e.date, end_date: nz(e.end), time: nz(e.time), time_end: nz(e.timeEnd), place: nz(e.place) })),
     load: rs => { S.events = rs.map(r => ({ id:r.id, member:r.member_id || 'gemeinsam',
       title:r.title, date:r.date, ...(r.end_date?{end:r.end_date}:{}),
-      ...(r.time?{time:r.time}:{}), ...(r.place?{place:r.place}:{}) })); }
+      ...(r.time?{time:r.time}:{}), ...(r.time_end?{timeEnd:r.time_end}:{}),
+      ...(r.place?{place:r.place}:{}) })); }
   },
   lists: {
     rows: () => S.lists.map((l,i) => ({ id:l.id, name:l.name, sort:i })),
@@ -1252,7 +1393,7 @@ function viewCal(){
         ${av(e.member,'sm')}
         <div class="body"><div class="t">${esc(e.title)}</div>
           <div class="s">${esc(mem(e.member).name)}${e.end && e.end > e.date ? ' · '+fmtDay(e.date)+' bis '+fmtDay(e.end) : ''}${e.place ? ' · '+esc(e.place) : ''}</div></div>
-        <div class="r">${e.time||''}</div>
+        <div class="r">${e.time ? e.time + (e.timeEnd ? '–'+e.timeEnd : '') : ''}</div>
         ${may('events.edit') ? `<button class="linkbtn" data-editev="${e.id}" aria-label="Bearbeiten">›</button>` : ''}
       </div>`).join('') : '<div class="empty">Nichts geplant.</div>'}
     </div>
@@ -1662,11 +1803,17 @@ function openSheet(kind, pre){
   const sel = pre.date || S.ui.calSel;
   const html = kind === 'event' ? `
     <h3>Neuer Termin</h3>
+    <div class="micbox">
+      <button class="micbtn" id="micBtn" type="button" data-mic aria-label="Sprechen">${icon('mic',20)}</button>
+      <div><div class="micline">Sprechen: Zeit, Person, Tätigkeit</div>
+        <div class="micsub" id="micText">„von 17 bis 19 Uhr Anna Volleyball“</div></div>
+    </div>
     <div class="field"><label for="f-title">Was</label><input id="f-title" placeholder="z. B. Zahnarzt"></div>
     <div class="field"><label for="f-mem">Wer</label><select id="f-mem">${MEMBERS.map(m=>`<option value="${m.id}" ${pre.member===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
     <div class="field two">
       <div style="flex:2"><label for="f-date">Wann</label><input id="f-date" type="date" value="${sel}"></div>
-      <div style="flex:1"><label for="f-time">Zeit</label><input id="f-time" type="time" value="17:00"></div>
+      <div style="flex:1"><label for="f-time">Von</label><input id="f-time" type="time" value="17:00"></div>
+      <div style="flex:1"><label for="f-timeend">Bis</label><input id="f-timeend" type="time"></div>
     </div>
     <div class="field"><label for="f-end">Bis (nur bei mehrtägigem, sonst leer lassen)</label><input id="f-end" type="date"></div>
     <div class="field"><label for="f-place">Wo (optional)</label><input id="f-place" placeholder="Ort"></div>
@@ -1676,11 +1823,17 @@ function openSheet(kind, pre){
       editId = pre.id;
       return `
     <h3>Termin bearbeiten</h3>
+    <div class="micbox">
+      <button class="micbtn" id="micBtn" type="button" data-mic aria-label="Sprechen">${icon('mic',20)}</button>
+      <div><div class="micline">Sprechen: Zeit, Person, Tätigkeit</div>
+        <div class="micsub" id="micText">überschreibt die Felder</div></div>
+    </div>
     <div class="field"><label for="f-title">Was</label><input id="f-title" value="${esc(e.title||'')}"></div>
     <div class="field"><label for="f-mem">Wer</label><select id="f-mem">${MEMBERS.map(m=>`<option value="${m.id}" ${e.member===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
     <div class="field two">
       <div style="flex:2"><label for="f-date">Von</label><input id="f-date" type="date" value="${e.date||''}"></div>
-      <div style="flex:1"><label for="f-time">Zeit</label><input id="f-time" type="time" value="${e.time||''}"></div>
+      <div style="flex:1"><label for="f-time">Von</label><input id="f-time" type="time" value="${e.time||''}"></div>
+      <div style="flex:1"><label for="f-timeend">Bis</label><input id="f-timeend" type="time" value="${e.timeEnd||''}"></div>
     </div>
     <div class="field"><label for="f-end">Bis (leer bei eintägig)</label><input id="f-end" type="date" value="${e.end||''}"></div>
     <div class="field"><label for="f-place">Wo</label><input id="f-place" value="${esc(e.place||'')}"></div>
@@ -1799,6 +1952,7 @@ document.addEventListener('click', e => {
   if (d.loginpick){ loginPick = d.loginpick; loginManual = false; return showLogin(); }
   if ('loginback' in d){ loginPick = null; loginManual = false; return showLogin(); }
   if ('loginmanual' in d){ loginPick = null; loginManual = true; return showLogin(); }
+  if ('mic' in d){ return speechAn(); }
   if ('dologin' in d){ return doLogin(); }
   if ('logout' in d){ return logout(); }
   if ('uploadlocal' in d){ if (!may('admin')) return deny();
@@ -1875,7 +2029,7 @@ document.addEventListener('click', e => {
     const title = $('#f-title').value.trim(); if (!title) return $('#f-title').focus();
     const end = $('#f-end').value;
     S.events.push({ id:uid(), title, member:$('#f-mem').value, date:$('#f-date').value,
-      time:$('#f-time').value, place:$('#f-place').value.trim(),
+      time:$('#f-time').value, timeEnd:$('#f-timeend').value, place:$('#f-place').value.trim(),
       ...(end && end > $('#f-date').value ? { end } : {}) });
     S.ui.calSel = $('#f-date').value; closeSheet(); return render();
   }
@@ -1885,6 +2039,7 @@ document.addEventListener('click', e => {
     const end = $('#f-end').value;
     t.title = title; t.member = $('#f-mem').value; t.date = $('#f-date').value;
     t.time = $('#f-time').value; t.place = $('#f-place').value.trim();
+    const te = $('#f-timeend').value; if (te) t.timeEnd = te; else delete t.timeEnd;
     if (end && end > t.date) t.end = end; else delete t.end;
     closeSheet(); return render();
   }
