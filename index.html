@@ -170,6 +170,40 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .day .pip{width:4px;height:4px;border-radius:50%}
 .day[aria-pressed="true"] .pip{box-shadow:0 0 0 1px var(--paper)}
 
+/* Planer: Tage als Zeilen, Personen als Spalten */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;background:var(--surface)}
+.seg button{padding:5px 13px;border-radius:999px;font-size:13px;font-weight:500;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+
+.p-wrap{margin:12px calc(var(--pad)*-1) 0;background:var(--surface);
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.p-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.pgrid{display:grid;min-width:max-content;--rh:34px}
+.p-corner,.p-hcell{position:sticky;top:0;z-index:5;background:var(--surface);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:5px;
+  font-size:12px;font-weight:600;font-family:"Bricolage Grotesque",sans-serif}
+.p-corner{left:0;z-index:6}
+.p-hcell{border-left:1px solid var(--line-soft)}
+.p-hcell i{width:7px;height:7px;border-radius:50%}
+.p-stripe{grid-column:1/-1;z-index:0;background:var(--surface-2)}
+.p-stripe.hol{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-soft)}
+.p-day{position:sticky;left:0;z-index:4;background:var(--surface);
+  display:flex;align-items:center;gap:5px;padding:0 6px;font-size:12.5px;
+  border-right:1px solid var(--line);text-align:left;width:100%}
+.p-day.we{background:var(--surface-2)}
+.p-day b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:14px;min-width:17px;text-align:right}
+.p-day span{color:var(--muted);font-size:11px}
+.p-day u{margin-left:auto;color:var(--muted);font-size:9.5px;text-decoration:none;font-variant-numeric:tabular-nums}
+.p-day.red b{color:var(--alert)}
+.p-day[aria-pressed="true"]{background:var(--ink)}
+.p-day[aria-pressed="true"] b,.p-day[aria-pressed="true"] span,.p-day[aria-pressed="true"] u{color:var(--paper)}
+.p-col{position:relative;z-index:1;border-left:1px solid var(--line-soft);
+  background-image:repeating-linear-gradient(to bottom,var(--line-soft) 0 1px,transparent 1px var(--rh))}
+.p-ev{position:absolute;border-radius:5px;padding:2px 5px;font-size:11px;line-height:1.25;
+  overflow:hidden;border-left:2.5px solid var(--pc);color:var(--ink)}
+.p-ev b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;margin-right:3px}
+.p-legend{font-size:11.5px;color:var(--muted);margin-top:8px;text-align:center}
+
 /* Einkauf */
 .addbar{display:flex;gap:8px;align-items:center;padding:10px 0 2px}
 .addbar input{
@@ -308,7 +342,9 @@ function seed(){ return {
     { id:uid(), member:'anna',   title:'Kino mit Nina',         time:'19:00', date:D(4)  },
     { id:uid(), member:'ka', title:'Spätschicht',           time:'13:00', date:D(5)  },
     { id:uid(), member:'paul',    title:'Schwimmkurs',           time:'16:00', date:D(9)  },
-    { id:uid(), member:'anna',   title:'Klassenlager Anreise',  time:'07:45', date:D(12), place:'Bahnhof' }
+    { id:uid(), member:'anna',   title:'Klassenlager',          time:'07:45', date:D(12), end:D(16), place:'Bahnhof' },
+    { id:uid(), member:'paedu',  title:'Skiweekend',                           date:D(5),  end:D(7) },
+    { id:uid(), member:'moritz', title:'Fussballcamp',                         date:D(19), end:D(22) }
   ],
   lists: [
     { id:'migros', name:'Migros', items:[
@@ -367,7 +403,7 @@ function seed(){ return {
     { id:uid(), member:'ka', text:'Fragen wir heute Abend am Tisch.',         t:'09:41' },
     { id:uid(), member:'moritz',   text:'Mein Fussballmatch ist verschoben, jetzt Mittwoch!', t:'11:02' }
   ],
-  ui: { list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(), calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
+  ui: { calView:'planer', list:'migros', calMonth:TODAY.getMonth(), calYear:TODAY.getFullYear(), calSel:TODAY_ISO, calFilter:'alle', schoolFilter:'alle', hideDone:false }
 };}
 
 const REASONS = [
@@ -383,6 +419,7 @@ let S;
 try { const raw = localStorage.getItem(KEY); S = raw ? JSON.parse(raw) : seed(); }
 catch(e){ S = seed(); }
 if (!S || !S.events) S = seed();
+if (!S.ui.calView) S.ui.calView = 'planer';
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
 
 /* ============ Helfer ============ */
@@ -399,6 +436,39 @@ const deduction = id => strikesOf(id).reduce((n,s) => n + s.amount, 0);
 const payout = id => Math.max(0, (SACKGELD[id]||0) - deduction(id));
 const choresOf = id => S.chores.filter(c => c.member === id);
 const openChoresToday = id => choresOf(id).filter(c => !c.done.includes(TODAY_ISO)).length;
+
+/* Kalenderwoche nach ISO */
+function isoWeek(d){
+  const t = new Date(d); t.setHours(0,0,0,0);
+  t.setDate(t.getDate() + 3 - ((t.getDay()+6)%7));
+  const w1 = new Date(t.getFullYear(), 0, 4);
+  return 1 + Math.round(((t - w1)/86400000 - 3 + ((w1.getDay()+6)%7)) / 7);
+}
+/* Ostersonntag, daraus die beweglichen Feiertage */
+function easter(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
+        f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,
+        i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+        mm=Math.floor((h+l-7*m+114)/31),dd=((h+l-7*m+114)%31)+1;
+  return new Date(y, mm-1, dd);
+}
+const holCache = {};
+function holidays(y){
+  if (holCache[y]) return holCache[y];
+  const E = easter(y), o = n => iso(addDays(E, n)), P = m => `${y}-${m}`;
+  const h = {};
+  h[P('01-01')]='Neujahr'; h[P('01-02')]='Berchtoldstag';
+  h[o(-2)]='Karfreitag'; h[o(0)]='Ostern'; h[o(1)]='Ostermontag';
+  h[P('05-01')]='Tag der Arbeit'; h[o(39)]='Auffahrt'; h[o(50)]='Pfingstmontag';
+  h[P('08-01')]='Nationalfeiertag'; h[P('12-25')]='Weihnachten'; h[P('12-26')]='Stephanstag';
+  return holCache[y] = h;
+}
+/* Hexfarbe leicht eingefärbt als Hintergrund */
+function tint(hex, a){
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;
+}
+const evEnd = e => e.end && e.end > e.date ? e.end : e.date;
 
 /* ============ Router ============ */
 const TABS = [
@@ -501,13 +571,82 @@ function viewHome(){
 }
 
 /* ============ Kalender ============ */
-function viewCal(){
-  const y = S.ui.calYear, mo = S.ui.calMonth;
-  const first = new Date(y, mo, 1);
-  const lead = (first.getDay() + 6) % 7;
-  const start = addDays(first, -lead);
-  const filt = S.ui.calFilter;
+function planerHTML(){
+  const y = S.ui.calYear, mo = S.ui.calMonth, filt = S.ui.calFilter;
+  const nDays = new Date(y, mo+1, 0).getDate();
+  const cols = filt === 'alle' ? MEMBERS : MEMBERS.filter(m => m.id === filt);
+  const hol = holidays(y);
+  const first = `${y}-${String(mo+1).padStart(2,'0')}-01`;
+  const last  = `${y}-${String(mo+1).padStart(2,'0')}-${String(nDays).padStart(2,'0')}`;
 
+  /* Kopfzeile */
+  let html = `<div class="p-corner" style="grid-area:1/1">KW</div>`;
+  cols.forEach((m, i) => {
+    html += `<div class="p-hcell" style="grid-row:1;grid-column:${i+2}">
+      <i style="background:${m.color}"></i>${m.name}</div>`;
+  });
+
+  /* Streifen für Wochenenden und Feiertage */
+  for (let d = 1; d <= nDays; d++){
+    const dt = new Date(y, mo, d), k = iso(dt), wd = dt.getDay();
+    if (wd === 0 || wd === 6 || hol[k])
+      html += `<div class="p-stripe ${hol[k]?'hol':''}" style="grid-row:${d+1}"></div>`;
+  }
+
+  /* Tagesspalte */
+  for (let d = 1; d <= nDays; d++){
+    const dt = new Date(y, mo, d), k = iso(dt), wd = dt.getDay();
+    const kw = wd === 1 ? isoWeek(dt) : '';
+    html += `<button class="p-day ${(wd===0||wd===6)?'we':''} ${(wd===0||hol[k])?'red':''}"
+      style="grid-row:${d+1};grid-column:1" data-day="${k}"
+      ${k===S.ui.calSel?'aria-pressed="true"':''} ${hol[k]?`title="${hol[k]}"`:''}>
+      <b>${d}</b><span>${WD[wd]}</span><u>${kw}</u></button>`;
+  }
+
+  /* Personenspalten mit den Einträgen */
+  cols.forEach((m, ci) => {
+    const evs = S.events
+      .filter(e => e.member === m.id && e.date <= last && evEnd(e) >= first)
+      .map(e => {
+        const s0 = e.date < first ? 1 : new Date(e.date+'T00:00').getDate();
+        const s1 = evEnd(e) > last ? nDays : new Date(evEnd(e)+'T00:00').getDate();
+        return { ...e, a: s0, b: s1 };
+      })
+      .sort((x, y2) => x.a - y2.a || (y2.b - y2.a) - (x.b - x.a));
+
+    /* Spuren berechnen, damit sich Überlappendes nebeneinander legt */
+    const lanes = [];
+    evs.forEach(e => {
+      let l = lanes.findIndex(end => end < e.a);
+      if (l === -1){ l = lanes.length; lanes.push(0); }
+      lanes[l] = e.b; e.lane = l;
+    });
+    const L = Math.max(1, lanes.length);
+
+    const inner = evs.map(e => {
+      const span = e.b - e.a + 1;
+      const w = `calc(${(100/L).toFixed(4)}% - 3px)`;
+      return `<div class="p-ev" style="--pc:${e.member && M[e.member].color};
+        background:${tint(M[e.member].color, .13)};
+        top:calc(var(--rh) * ${e.a-1} + 2px);
+        height:calc(var(--rh) * ${span} - 4px);
+        left:calc(${(100/L*e.lane).toFixed(4)}% + 2px);width:${w}"
+        title="${esc(e.title)}">${e.time && span===1 ? `<b>${e.time}</b>` : ''}${esc(e.title)}</div>`;
+    }).join('');
+
+    html += `<div class="p-col" style="grid-row:2/-1;grid-column:${ci+2}">${inner}</div>`;
+  });
+
+  return `<div class="p-wrap"><div class="p-scroll"><div class="pgrid"
+    style="grid-template-columns:58px repeat(${cols.length},minmax(${cols.length>2?'92px':'150px'},1fr));
+           grid-template-rows:34px repeat(${nDays},var(--rh))">${html}</div></div></div>
+    <p class="p-legend">Seitlich wischen, wenn nicht alle Spalten Platz haben. Auf einen Tag tippen zeigt ihn unten im Detail.</p>`;
+}
+
+function rasterHTML(){
+  const y = S.ui.calYear, mo = S.ui.calMonth, filt = S.ui.calFilter;
+  const first = new Date(y, mo, 1);
+  const start = addDays(first, -((first.getDay()+6)%7));
   let cells = '';
   for (let i = 0; i < 42; i++){
     const d = addDays(start, i), k = iso(d);
@@ -518,25 +657,37 @@ function viewCal(){
       data-day="${k}" ${k===S.ui.calSel?'aria-pressed="true"':''}>
       ${d.getDate()}<span class="pips">${pips}</span></button>`;
   }
+  return `<div class="cal" style="margin-top:12px">
+    <div class="grid">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<div class="wd">${d}</div>`).join('')}</div>
+    <div class="grid">${cells}</div></div>`;
+}
 
-  const sel = eventsOn(S.ui.calSel).filter(e => filt==='alle' || e.member===filt);
+function viewCal(){
+  const y = S.ui.calYear, mo = S.ui.calMonth, filt = S.ui.calFilter;
+  const planer = S.ui.calView !== 'raster';
+  const sel = S.events.filter(e => e.date <= S.ui.calSel && evEnd(e) >= S.ui.calSel)
+    .filter(e => filt==='alle' || e.member===filt).sort(ev);
 
   return `
+  <div class="sec-head" style="margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="iconbtn" data-mon="-1" aria-label="Vorheriger Monat">${icon('left',18)}</button>
+      <span class="mon" style="font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:600">${MON[mo]} ${y}</span>
+      <button class="iconbtn" data-mon="1" aria-label="Nächster Monat">${icon('right',18)}</button>
+    </div>
+    <div class="seg">
+      <button data-calview="planer" aria-pressed="${planer}">Planer</button>
+      <button data-calview="raster" aria-pressed="${!planer}">Raster</button>
+    </div>
+  </div>
+
   <div class="chips">
     <button class="chip" data-filter="alle" aria-pressed="${filt==='alle'}">Alle</button>
     ${MEMBERS.map(m => `<button class="chip" data-filter="${m.id}" aria-pressed="${filt===m.id}">
       <i class="dot" style="background:${m.color}"></i>${m.name}</button>`).join('')}
   </div>
 
-  <div class="cal" style="margin-top:12px">
-    <div class="cal-head">
-      <button class="iconbtn" data-mon="-1" aria-label="Vorheriger Monat">${icon('left',18)}</button>
-      <span class="mon">${MON[mo]} ${y}</span>
-      <button class="iconbtn" data-mon="1" aria-label="Nächster Monat">${icon('right',18)}</button>
-    </div>
-    <div class="grid">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<div class="wd">${d}</div>`).join('')}</div>
-    <div class="grid">${cells}</div>
-  </div>
+  ${planer ? planerHTML() : rasterHTML()}
 
   <section class="sec">
     <div class="sec-head"><h2>${relDay(S.ui.calSel)}</h2>
@@ -545,7 +696,7 @@ function viewCal(){
       <div class="row" style="--pc:${M[e.member].color}"><i class="bar"></i>
         ${av(e.member,'sm')}
         <div class="body"><div class="t">${esc(e.title)}</div>
-          <div class="s">${M[e.member].name}${e.place ? ' · '+esc(e.place) : ''}</div></div>
+          <div class="s">${M[e.member].name}${e.end && e.end > e.date ? ' · '+fmtDay(e.date)+' bis '+fmtDay(e.end) : ''}${e.place ? ' · '+esc(e.place) : ''}</div></div>
         <div class="r">${e.time||''}</div>
         <button class="linkbtn" data-delev="${e.id}" aria-label="Termin löschen">×</button>
       </div>`).join('') : '<div class="empty">Nichts geplant. Tippe auf „Termin“, um etwas einzutragen.</div>'}
@@ -708,6 +859,7 @@ function openSheet(kind){
       <div style="flex:2"><label for="f-date">Wann</label><input id="f-date" type="date" value="${sel}"></div>
       <div style="flex:1"><label for="f-time">Zeit</label><input id="f-time" type="time" value="17:00"></div>
     </div>
+    <div class="field"><label for="f-end">Bis (nur bei mehrtägigem, sonst leer lassen)</label><input id="f-end" type="date"></div>
     <div class="field"><label for="f-place">Wo (optional)</label><input id="f-place" placeholder="Ort"></div>
     <div class="actions"><button class="btn ghost" data-close>Abbrechen</button><button class="btn" data-save="event">Termin sichern</button></div>`
   : `
@@ -741,6 +893,7 @@ document.addEventListener('click', e => {
 
   if (d.mon){ let m = S.ui.calMonth + (+d.mon); if (m < 0){ m = 11; S.ui.calYear--; } if (m > 11){ m = 0; S.ui.calYear++; } S.ui.calMonth = m; return render(); }
   if (d.day){ S.ui.calSel = d.day; const dd = new Date(d.day+'T00:00'); S.ui.calMonth = dd.getMonth(); S.ui.calYear = dd.getFullYear(); return render(); }
+  if (d.calview){ S.ui.calView = d.calview; return render(); }
   if (d.filter){ S.ui.calFilter = d.filter; return render(); }
   if (d.delev){ S.events = S.events.filter(x => x.id !== d.delev); return render(); }
 
@@ -774,8 +927,10 @@ document.addEventListener('click', e => {
 
   if (d.save === 'event'){
     const title = $('#f-title').value.trim(); if (!title) return $('#f-title').focus();
+    const end = $('#f-end').value;
     S.events.push({ id:uid(), title, member:$('#f-mem').value, date:$('#f-date').value,
-      time:$('#f-time').value, place:$('#f-place').value.trim() });
+      time:$('#f-time').value, place:$('#f-place').value.trim(),
+      ...(end && end > $('#f-date').value ? { end } : {}) });
     S.ui.calSel = $('#f-date').value; closeSheet(); return render();
   }
   if (d.save === 'school'){
