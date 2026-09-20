@@ -1029,8 +1029,16 @@ const TABS = [
 let tab = 'home';
 const $ = s => document.querySelector(s);
 
+let letzterTab = null;
 function render(){
-  const t = TABS.find(x => x.id === tab);
+  const gleicherTab = letzterTab === tab;
+
+  /* Scrollstand merken, damit der Planer nach einem Neuaufbau
+     nicht wieder oben links beginnt */
+  const sc = document.querySelector('.p-scroll');
+  const halt = (gleicherTab && sc) ? { l: sc.scrollLeft, t: sc.scrollTop } : null;
+  const seite = gleicherTab ? (window.scrollY || 0) : 0;
+
   $('#topTitle').textContent = { home:'Startseite', cal:'Kalender', shop:'Einkauf', school:'Schule',
     chores:'Ämtli & Sackgeld', chat:'Chat', profil:'Profile & Rechte' }[tab];
   $('#topDate').textContent = `${WDL[TODAY.getDay()]}, ${TODAY.getDate()}. ${MON[TODAY.getMonth()]} ${TODAY.getFullYear()}`;
@@ -1039,8 +1047,16 @@ function render(){
   ).join('');
   $('#view').innerHTML = ({ home:viewHome, cal:viewCal, shop:viewShop, school:viewSchool,
     chores:viewChores, chat:viewChat, profil:viewProfil })[tab]();
-  if (tab === 'cal') initPlaner();
+
+  if (tab === 'cal'){
+    initPlaner();
+    const neuSc = document.querySelector('.p-scroll');
+    if (neuSc && halt){ neuSc.scrollLeft = halt.l; neuSc.scrollTop = halt.t; }
+  }
   if (tab === 'chat') window.scrollTo(0, document.body.scrollHeight);
+  else if (gleicherTab && seite) window.scrollTo(0, seite);
+
+  letzterTab = tab;
   save();
 }
 
@@ -1782,8 +1798,8 @@ document.addEventListener('click', e => {
   if (d.payday){ if (!may('admin')) return deny(); S.allowance.day = +d.payday; return render(); }
   if (d.editev){ if (!may('events.edit')) return deny(); return openSheet('editev', { id:d.editev }); }
   if ('today' in d){ S.ui.calMonth = TODAY.getMonth(); S.ui.calYear = TODAY.getFullYear();
-    S.ui.calSel = TODAY_ISO; return render(); }
-  if (d.mon){ let m = S.ui.calMonth + (+d.mon); if (m < 0){ m = 11; S.ui.calYear--; } if (m > 11){ m = 0; S.ui.calYear++; } S.ui.calMonth = m; return render(); }
+    S.ui.calSel = TODAY_ISO; letzterTab = null; return render(); }
+  if (d.mon){ let m = S.ui.calMonth + (+d.mon); if (m < 0){ m = 11; S.ui.calYear--; } if (m > 11){ m = 0; S.ui.calYear++; } S.ui.calMonth = m; letzterTab = null; return render(); }
   if (d.day){ S.ui.calSel = d.day; const dd = new Date(d.day+'T00:00'); S.ui.calMonth = dd.getMonth(); S.ui.calYear = dd.getFullYear(); return render(); }
   if (d.filter){ S.ui.calFilter = d.filter; return render(); }
   if (d.delev){ if (!may('events.edit')) return deny();
