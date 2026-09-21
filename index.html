@@ -208,12 +208,14 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .p-day[aria-pressed="true"] b,.p-day[aria-pressed="true"] span,.p-day[aria-pressed="true"] u{color:var(--paper)}
 .p-colbg{z-index:0;border-left:1px solid var(--line-soft)}
 .p-layer{position:relative;z-index:2}
-.p-ev{position:absolute;border-radius:5px;padding:2px 5px;font-size:10.5px;line-height:1.2;
+.p-ev{position:absolute;border-radius:5px;padding:1px 4px;font-size:10px;line-height:1.15;
   overflow:hidden;border-left:2px solid var(--pc);color:var(--ink);
-  /* Passt der Text nicht neben die Uhrzeit, bricht er auf die zweite Zeile */
-  white-space:normal;overflow-wrap:anywhere;word-break:break-word;hyphens:auto;
-  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.p-ev b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;margin-right:3px;font-size:10px}
+  display:flex;flex-direction:column;justify-content:flex-start}
+/* Zeile 1: Kürzel und Zeit. Zeile 2: immer der Text */
+.p-ev .l1,.p-ev .l2{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.p-ev .l1{height:12px;line-height:12px}
+.p-ev .l2{margin-top:1px}
+.p-ev b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:9.5px}
 .p-ev .rz{position:absolute;top:0;bottom:0;width:9px;cursor:ew-resize;z-index:3;
   display:flex;align-items:center;justify-content:center}
 .p-ev .rz::after{content:'';width:2px;height:55%;border-radius:1px;background:var(--pc);opacity:.55}
@@ -222,8 +224,8 @@ main{flex:1;padding:var(--pad) var(--pad) 96px}
 .p-ev.dehnbar{padding-right:10px}
 .p-ev.dehnt{box-shadow:0 0 0 2px var(--pc);z-index:5}
 .p-ev .pk{display:inline-block;color:#fff;font-size:8.5px;font-weight:600;font-style:normal;
-  font-family:"Bricolage Grotesque",sans-serif;border-radius:3px;padding:0 3px;margin-right:4px;
-  vertical-align:1px;letter-spacing:.02em}
+  font-family:"Bricolage Grotesque",sans-serif;border-radius:3px;padding:0 3px;margin-right:3px;
+  line-height:11px;vertical-align:top;letter-spacing:.02em}
 .p-legend{font-size:11.5px;color:var(--muted);margin-top:8px;text-align:center}
 
 .p-ev{cursor:grab;user-select:none;-webkit-user-select:none;
@@ -1384,7 +1386,7 @@ function viewHome(){
 }
 
 /* ============ Kalender ============ */
-const RH = 30;                 // Höhe einer Terminzeile in Pixel
+const RH = 32;                 // Höhe einer Terminzeile in Pixel, zwei Textzeilen
 let planerGeo = null;
 
 /* Die drei Tagesbereiche. Jeder ist innerlich in Stunden unterteilt,
@@ -1490,9 +1492,8 @@ function planerHTML(){
     const ganz = (n === SLOTN);
     const dehnbar = !!e.time && !(e.end && e.end > e.date);
     /* Je schmaler die Kachel, desto weniger Text passt hinein */
-    const inhalt = `<i class="pk" style="background:${m.color}">${esc(ini(m))}</i>`
-      + ((ganz || n >= 2) && e.time ? `<b>${e.time}</b>` : '')
-      + (ganz || n >= 3 ? esc(e.title) : '');
+    const inhalt = `<span class="l1"><i class="pk" style="background:${m.color}">${esc(ini(m))}</i>${
+        e.time ? `<b>${e.time}</b>` : ''}</span><span class="l2">${esc(e.title)}</span>`;
     return `<div class="p-ev${dehnbar?' dehnbar':''}" data-ev="${e.id}" data-c1="${e.c1}" data-c2="${e.c2}"
       style="--pc:${m.color};background:${tint(m.color, .15)};
       top:${top + 2}px;height:${hgt - 4}px;
