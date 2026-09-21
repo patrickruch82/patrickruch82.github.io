@@ -288,6 +288,7 @@ body.dragging .p-scroll{touch-action:none}
   display:grid;place-items:center}
 .micbtn.hoert{background:var(--alert);animation:pulsiert 1.1s ease-in-out infinite}
 @keyframes pulsiert{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+.micbtn.sm{width:38px;height:38px}
 .micline{font-size:13px;font-weight:500}
 .micsub{font-size:12px;color:var(--muted);margin-top:2px}
 .permrow{padding:11px 0;border-bottom:1px solid var(--line-soft)}
@@ -769,9 +770,64 @@ function parseSpeech(text, members){
 }
 
 
+/* ============ Spracheingabe für den Einkauf ============ */
+const EINH = { kilo:'kg', kilogramm:'kg', kg:'kg', gramm:'g', liter:'l', deziliter:'dl',
+  packung:'Pack', packungen:'Pack', packli:'Pack', stück:'Stk', stueck:'Stk',
+  flasche:'Fl', flaschen:'Fl', dose:'Dose', dosen:'Dosen', becher:'Becher', netz:'Netz', bund:'Bund' };
+const MENGE = { ein:1, eine:1, einen:1, eins:1, zwei:2, drei:3, vier:4, fünf:5, fuenf:5,
+  sechs:6, sieben:7, acht:8, neun:9, zehn:10, elf:11, zwölf:12, zwoelf:12, halbes:'½', halbe:'½' };
+/* Wörter, die eine Liste bezeichnen */
+const LISTWORT = { lebensmittel:'lebensmittel', essen:'lebensmittel',
+  medikamente:'medikamente', medikament:'medikamente', apotheke:'medikamente', drogerie:'medikamente',
+  kleider:'kleider', kleidung:'kleider',
+  tierbedarf:'tierbedarf', haushalt:'haushalt' };
+
+const entuS = s => s.toLowerCase().replace(/ä/g,'a').replace(/ö/g,'o').replace(/ü/g,'u').replace(/ß/g,'ss');
+
+function parseShopping(text, listIds){
+  let t = ' ' + text.trim().replace(/\s+/g,' ') + ' ';
+
+  /* Ziel-Liste suchen, samt "für den" davor */
+  let liste = null;
+  for (const [wort, id] of Object.entries(LISTWORT)){
+    if (!listIds.includes(id)) continue;
+    const re = new RegExp(`(\\s(?:für|fuer|in|zu|bei)\\s(?:den|die|das|dem)?\\s?)?\\b${wort}\\b[:,]?`, 'i');
+    if (re.test(t)){ liste = id; t = t.replace(re, ' '); break; }
+  }
+
+  /* Füllwörter weg */
+  t = t.replace(/\b(ich brauche|wir brauchen|brauchen|brauche|bitte|noch|kaufen|einkaufen|auf die (einkaufs)?liste|setz|setze|schreib|schreibe|und dann|dazu)\b/gi, ' ');
+
+  /* In einzelne Artikel teilen */
+  const teile = t.split(/\s*(?:,|;|\bund\b|\bsowie\b|\bplus\b)\s*/i)
+    .map(x => x.replace(/\s+/g,' ').trim()).filter(Boolean);
+
+  const items = teile.map(roh => {
+    let w = roh.split(' ');
+    let menge = '', einheit = '';
+    const erst = w[0] && w[0].toLowerCase();
+    if (erst && (MENGE[erst] !== undefined || /^\d+([.,]\d+)?$/.test(erst))){
+      menge = MENGE[erst] !== undefined ? String(MENGE[erst]) : erst.replace(',', '.');
+      w = w.slice(1);
+    }
+    const zweit = w[0] && entuS(w[0]);
+    const einhSchluessel = Object.keys(EINH).find(k => entuS(k) === zweit);
+    if (einhSchluessel){ einheit = EINH[einhSchluessel]; w = w.slice(1); }
+    let name = w.join(' ').trim();
+    if (!name) return null;
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    /* "ein Brot" ohne Einheit: die Eins weglassen */
+    if (menge === '1' && !einheit) menge = '';
+    return [menge, einheit, name].filter(Boolean).join(' ');
+  }).filter(Boolean);
+
+  return { list: liste, items };
+}
+
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let hoert = null;
-function speechAn(){
+/* Gemeinsame Aufnahme für Termine und Einkauf */
+function hoeren(knopfId, anzeigeId, fertig){
   if (!SR){
     toast('Dieses Gerät kennt keine Spracherkennung. Nutze das Mikrofon auf der Tastatur.');
     return;
@@ -779,24 +835,50 @@ function speechAn(){
   if (hoert){ hoert.stop(); return; }
   const r = new SR();
   r.lang = 'de-CH'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
-  const knopf = document.getElementById('micBtn');
-  const anzeige = document.getElementById('micText');
+  const knopf = document.getElementById(knopfId);
+  const anzeige = document.getElementById(anzeigeId);
   if (knopf) knopf.classList.add('hoert');
   if (anzeige) anzeige.textContent = 'Hört zu …';
-
+  let erledigt = false;
   r.onresult = e => {
     let txt = '';
     for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
     if (anzeige) anzeige.textContent = txt;
-    if (e.results[e.results.length-1].isFinal) uebernehmen(txt);
+    if (e.results[e.results.length-1].isFinal && !erledigt){ erledigt = true; fertig(txt); }
   };
   r.onerror = e => {
     if (anzeige) anzeige.textContent = e.error === 'not-allowed'
       ? 'Zugriff aufs Mikrofon verweigert.' : 'Nichts verstanden.';
   };
-  r.onend = () => { hoert = null; if (knopf) knopf.classList.remove('hoert'); };
+  r.onend = () => { hoert = null; const k = document.getElementById(knopfId); if (k) k.classList.remove('hoert'); };
   try { r.start(); hoert = r; } catch(err){ toast('Mikrofon nicht verfügbar.'); }
 }
+function speechAn(){ hoeren('micBtn', 'micText', uebernehmen); }
+
+/* Einkauf per Sprache */
+function einkaufSprechen(){
+  if (!may('shop.edit')) return deny();
+  hoeren('shopMic', 'shopMicText', txt => {
+    const g = parseShopping(txt, S.lists.map(l => l.id));
+    if (!g.items.length){
+      const a = document.getElementById('shopMicText'); if (a) a.textContent = 'Nichts erkannt.';
+      return;
+    }
+    const ziel = S.lists.find(l => l.id === (g.list || S.ui.list)) || S.lists[0];
+    const vorhanden = new Set(ziel.items.filter(i => !i.done).map(i => i.text.toLowerCase()));
+    let neu = 0;
+    g.items.forEach(text => {
+      if (vorhanden.has(text.toLowerCase())) return;
+      ziel.items.push({ id:uid(), text, done:false, by:S.me }); neu++;
+    });
+    S.ui.list = ziel.id;
+    render();
+    const a = document.getElementById('shopMicText');
+    if (a) a.textContent = `${neu} ${neu===1?'Artikel':'Artikel'} zu ${ziel.name}: ${g.items.join(', ')}`;
+    if (neu < g.items.length) toast('Was schon auf der Liste stand, habe ich nicht doppelt eingetragen.');
+  });
+}
+
 function uebernehmen(txt){
   const g = parseSpeech(txt, MEMBERS);
   const setz = (id, wert) => { const el = document.getElementById(id); if (el && wert) el.value = wert; };
@@ -1717,9 +1799,11 @@ function viewShop(){
   </div>
 
   ${may('shop.edit') ? `<div class="addbar">
+    <button class="micbtn sm" id="shopMic" type="button" data-shopmic aria-label="Sprechen">${icon('mic',18)}</button>
     <input id="shopInput" placeholder="Was fehlt?" aria-label="Artikel hinzufügen">
     <button class="btn" data-additem>Hinzufügen</button>
-  </div>` : ''}
+  </div>
+  <div class="micsub" id="shopMicText" style="margin:6px 2px 0">Mikrofon: „Milch, Brot und zwei Kilo Äpfel“ oder „Haushalt Schwämme“</div>` : ''}
 
   <div class="card" style="margin-top:10px">
     ${sorted.length ? sorted.map(i => `
@@ -2114,6 +2198,7 @@ document.addEventListener('click', e => {
   if ('loginback' in d){ loginPick = null; loginManual = false; return showLogin(); }
   if ('loginmanual' in d){ loginPick = null; loginManual = true; return showLogin(); }
   if ('mic' in d){ return speechAn(); }
+  if ('shopmic' in d){ return einkaufSprechen(); }
   if ('dologin' in d){ return doLogin(); }
   if ('logout' in d){ return logout(); }
   if ('uploadlocal' in d){ if (!may('admin')) return deny();
