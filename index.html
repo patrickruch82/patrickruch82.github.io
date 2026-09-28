@@ -1389,15 +1389,11 @@ function viewHome(){
 const RH = 32;                 // Höhe einer Terminzeile in Pixel, zwei Textzeilen
 let planerGeo = null;
 
-/* Die drei Tagesbereiche. Jeder ist innerlich in Stunden unterteilt,
-   sichtbar bleiben aber nur die drei Spalten. */
-const BANDS = [
-  { l:'Morgen', std:'08:00', std_h:[5,6,7,8,9,10] },
-  { l:'Mittag', std:'12:00', std_h:[11,12,13,14,15,16] },
-  { l:'Abend',  std:'18:00', std_h:[17,18,19,20,21,22] }
-];
+/* Sichtbarer Tagesausschnitt: 7 bis 21 Uhr.
+   Fünfzehn Stunden, aufgeteilt in drei Bereiche zu je fünf. */
+const SLOT0 = 7, SLOTN = 15, BANDLEN = 5;
+const BANDS = [{ l:'Morgen' }, { l:'Mittag' }, { l:'Abend' }];
 const hh = h => String(h).padStart(2,'0') + ':00';
-const SLOT0 = 5, SLOTN = 18;                       // 5 bis 22 Uhr, 18 Stunden
 const slotOf = h => Math.min(SLOTN-1, Math.max(0, h - SLOT0));
 const minOf = z => +z.slice(0,2)*60 + +z.slice(3,5);
 /* Erster und letzter Stundenschritt eines Termins */
@@ -1410,7 +1406,6 @@ function slotSpan(e){
   return [i1, Math.max(i1, slotOf(letzte))];
 }
 /* Ohne Uhrzeit: über alle drei Bereiche */
-const bandOf = t => !t ? -1 : (t < '11:00' ? 0 : t < '17:00' ? 1 : 2);
 
 function planerHTML(){
   const y = S.ui.calYear, mo = S.ui.calMonth, filt = S.ui.calFilter;
@@ -1460,7 +1455,7 @@ function planerHTML(){
   html += `<div class="p-hcell p-head" style="grid-row:1;grid-column:2/-1">
     <div class="hb">${BANDS.map(bd => `<span>${bd.l}</span>`).join('')}</div>
     <div class="hs">${Array.from({length:SLOTN}, (_,i) =>
-      `<span class="${i % 6 === 0 ? 'bandstart' : ''}">${SLOT0 + i}</span>`).join('')}</div>
+      `<span class="${i % BANDLEN === 0 ? 'bandstart' : ''}">${SLOT0 + i}</span>`).join('')}</div>
   </div>`;
 
   for (let d = 1; d <= nDays; d++){
@@ -1561,13 +1556,7 @@ function initPlaner(){
   const dayIso = d => `${Y}-${String(MO+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
   const layer = () => grid.querySelector('.p-layer');
-  const bandAt = x => {
-    const el = layer(); if (!el) return null;
-    const r = el.getBoundingClientRect();
-    if (x < r.left || x > r.right) return null;
-    return Math.min(2, Math.max(0, Math.floor((x - r.left) / (r.width / 3))));
-  };
-  /* Stündliches Einrasten: sechs Schritte je Bereich */
+  /* Stündliches Einrasten */
   const timeAt = x => {
     const el = layer(); if (!el) return null;
     const r = el.getBoundingClientRect();
@@ -1714,7 +1703,7 @@ function initPlaner(){
         const t = S.events.find(x => x.id === st.id);
         if (t){
           t.time = hh(SLOT0 + st.neu.c1);
-          t.timeEnd = hh(SLOT0 + st.neu.c2 + 1);        // höchstens 23:00
+          t.timeEnd = hh(SLOT0 + st.neu.c2 + 1);        // höchstens 22:00
           toast(`„${t.title}“ ${t.time}–${t.timeEnd}`);
         }
       }
