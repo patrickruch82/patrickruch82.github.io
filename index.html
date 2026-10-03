@@ -475,9 +475,16 @@ const mem = id => M[id] || { id, name:'Unbekannt', color:'#8A8A8A', role:'other'
 const ini = m => (m.name || '?').slice(0, 2);
 
 
-const TODAY = new Date(2026, 8, 20);           // So, 20.09.2026
+let TODAY = new Date(); TODAY.setHours(0,0,0,0);   // der echte heutige Tag
 const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const TODAY_ISO = iso(TODAY);
+let TODAY_ISO = iso(TODAY);
+/* Die App kann tagelang offen bleiben. Nach Mitternacht nachführen. */
+function tagPruefen(){
+  const jetzt = new Date(); jetzt.setHours(0,0,0,0);
+  if (iso(jetzt) === TODAY_ISO) return false;
+  TODAY = jetzt; TODAY_ISO = iso(TODAY);
+  return true;
+}
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
 const WD = ['So','Mo','Di','Mi','Do','Fr','Sa'];
 const WDL = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
@@ -488,7 +495,6 @@ const relDay = s => { const n = daysUntil(s); return n===0 ? 'Heute' : n===1 ? '
 const chf = n => (n<0?'−':'') + 'CHF ' + Math.abs(n).toFixed(2);
 const uid = () => Math.random().toString(36).slice(2,9);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const D = n => iso(addDays(TODAY, n));
 
 /* ============ Demodaten ============ */
 function seed(){ return {
@@ -582,6 +588,7 @@ if (!S.listsV2){
   S.listsV2 = true;
 }
 if (!S.lists.some(l => l.id === S.ui.list)) S.ui.list = S.lists[0].id;
+S.ui.calMonth = TODAY.getMonth(); S.ui.calYear = TODAY.getFullYear(); S.ui.calSel = TODAY_ISO;
 S.menu.forEach(m => { if (!m.id) m.id = 'n'+uid(); });
 S.chat.forEach(m => { if (!m.at) m.at = new Date().toISOString(); });
 
@@ -1116,10 +1123,12 @@ function startPolling(){
   clearInterval(pollTimer);
   pollTimer = setInterval(() => {
     if (document.hidden || dragState || document.querySelector('.sheet.open')) return;
+    if (tagPruefen()) render();
     pull().then(() => { markOnline(); render(); })
           .catch(() => { online = false; markOnline(); });
   }, 20000);
   document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && tagPruefen()) render();
     if (!document.hidden && auth)
       pull().then(() => { markOnline(); render(); }).catch(() => { online = false; markOnline(); });
   });
@@ -1317,7 +1326,7 @@ function viewHome(){
       ${av(m.id,'lg')}
       <div class="nm">${m.name}</div>
       <div class="nx">${next ? esc(next.title) : (m.role==='kid' ? (openChoresToday(m.id) ? openChoresToday(m.id)+' Ämtli offen' : 'Alles erledigt') : 'Nichts eingetragen')}</div>
-      ${next ? `<div class="tm">${next.time}</div>` : ''}
+      ${next && next.time ? `<div class="tm">${next.time}${next.timeEnd ? '–'+next.timeEnd : ''}</div>` : ''}
     </div>`;
   }).join('');
 
