@@ -1602,8 +1602,11 @@ function initPlaner(){
     const lay = e.target.closest('.p-layer'); if (!lay) return;
     const evEl = e.target.closest('.p-ev');
     const griff = e.target.closest('.rz');
+    const box = document.querySelector('.p-scroll');
     dragState = { x:e.clientX, y:e.clientY, evEl, id:evEl && evEl.dataset.ev,
-                  moved:false, drag:false, pid:e.pointerId };
+                  moved:false, drag:false, pid:e.pointerId,
+                  sl: box ? box.scrollLeft : 0, st0: box ? box.scrollTop : 0,
+                  wy: window.scrollY || 0 };
     if (griff && evEl && may('events.edit')){
       /* Griffe brauchen kein langes Drücken */
       dragState.rz = griff.dataset.rz;
@@ -1615,7 +1618,7 @@ function initPlaner(){
       return;
     }
     if (evEl && may('events.edit'))
-      dragState.timer = setTimeout(() => beginDrag(e.clientX, e.clientY), 330);
+      dragState.timer = setTimeout(() => beginDrag(e.clientX, e.clientY), 500);
   });
 
   let autoTimer = null;
@@ -1630,8 +1633,34 @@ function initPlaner(){
     autoTimer = requestAnimationFrame(autoScroll);
   }
 
+  function abbruch(){
+    const st = dragState; if (!st) return;
+    clearTimeout(st.timer);
+    if (st.drag){
+      if (autoTimer){ cancelAnimationFrame(autoTimer); autoTimer = null; }
+      document.body.classList.remove('dragging');
+      if (st.ghost) st.ghost.remove();
+      if (st.evEl) st.evEl.classList.remove('ghosted');
+      grid.querySelectorAll('.p-drop').forEach(n => n.remove());
+      markWeg();
+    }
+    dragState = null;
+  }
+  /* Sobald der Planer oder die Seite scrollt, ist es kein Verschieben */
+  function scrollGemerkt(){
+    const st = dragState; if (!st || st.rz) return;
+    if (!st.drag){ clearTimeout(st.timer); st.moved = true; return; }
+    if (!st.bewegt) abbruch();
+  }
+  const box0 = document.querySelector('.p-scroll');
+  if (box0) box0.addEventListener('scroll', scrollGemerkt, { passive:true });
+  window.addEventListener('scroll', scrollGemerkt, { passive:true });
+
   function beginDrag(x, y){
     const st = dragState; if (!st || !st.evEl) return;
+    const box = document.querySelector('.p-scroll');
+    const gescrollt = box && (box.scrollLeft !== st.sl || box.scrollTop !== st.st0);
+    if (gescrollt || (window.scrollY || 0) !== st.wy){ st.moved = true; return; }
     st.drag = true;
     document.body.classList.add('dragging');
     const r = st.evEl.getBoundingClientRect();
@@ -1653,7 +1682,7 @@ function initPlaner(){
   grid.addEventListener('pointermove', e => {
     const st = dragState; if (!st) return;
     if (!st.drag){
-      if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 10){ clearTimeout(st.timer); st.moved = true; }
+      if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 6){ clearTimeout(st.timer); st.moved = true; }
       return;
     }
     e.preventDefault();
@@ -1668,6 +1697,7 @@ function initPlaner(){
       markiere(c1, c2);
       return;
     }
+    st.bewegt = true;
     st.px = e.clientX; st.py = e.clientY;
     st.ghost.style.left = (e.clientX - st.offX) + 'px';
     st.ghost.style.top  = (e.clientY - st.offY) + 'px';
